@@ -1,6 +1,11 @@
 #include <cstdint>
 #include "Mt.hpp"
+#include "spdlog/spdlog.h"
 
+
+
+#define DTI_SIZE_MASK 0x7FFFFF
+#define DTI_FLAG_HAS_PROPS 0x20000000
 
 #define PROP_FLAG_BIT_18 0x20000
 #define PROP_FLAG_BIT_20 0x80000
@@ -8,11 +13,24 @@
 namespace Mt {
 
     uint64_t MtDTI::ClassSize() {
-        return (this->flag_and_size_div_4 & 0x7FFFFF) << 2;
+        return (this->flag_and_size_div_4 & DTI_SIZE_MASK) << 2;
     }
 
     bool MtDTI::HasProperties() {
-        return (this->flag_and_size_div_4 & 0x20000000) == 0;
+        MtDTI* cur = this;
+        do {
+            spdlog::info("MtDTI::HasProperties() -- checking node {0:X} ({1}), flags: {2:b}", (uint64_t)cur, cur->class_name, (cur->flag_and_size_div_4& 0x7F800000)>>23);
+
+            /*
+            if (this->flag_and_size_div_4 & DTI_FLAG_HAS_PROPS) {
+                return false;
+            }*/
+
+            cur = cur->parent;
+        } while (cur != nullptr && cur->parent != cur);
+
+        return true;
+        //return (this->flag_and_size_div_4 & 0x20000000) == 0;
     }
 
 	const char* MtProperty::GetTypeName() {

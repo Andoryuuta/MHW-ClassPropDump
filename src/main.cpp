@@ -88,7 +88,7 @@ void PauseAllOtherThreads() {
 						HANDLE thread = ::OpenThread(THREAD_ALL_ACCESS, FALSE, te.th32ThreadID);
 						if (thread != NULL)
 						{
-							spdlog::info("Suspending thread #{0}", te.th32ThreadID);
+							//spdlog::info("Suspending thread #{0}", te.th32ThreadID);
 							SuspendThread(thread);
 							CloseHandle(thread);
 						}
@@ -101,27 +101,49 @@ void PauseAllOtherThreads() {
 	}
 }
 
+void* __fastcall StubAllocator(void* cThis, uint64_t size, uint64_t align, uint64_t crc, uint32_t unk0, uint32_t unk1, char* className) {
+	spdlog::info("StubAllocator - Allocating {0} bytes for {1}", size, className);
+	return malloc(size);
+}
+
+
 DWORD WINAPI MyFunc(LPVOID lpvParam)
 {
 	OpenConsole();
 	spdlog::info("Ando's MHWClassPropDump Started!");
 
-	PauseAllOtherThreads();
-	spdlog::info("Suspended all other threads.");
+	//PauseAllOtherThreads();
+	//spdlog::info("Suspended all other threads.");
 
+	void* fauxAllocatorVtable[16] = {
+		(void*)StubAllocator, (void*)StubAllocator, (void*)StubAllocator, (void*)StubAllocator,
+		(void*)StubAllocator, (void*)StubAllocator, (void*)StubAllocator, (void*)StubAllocator,
+		(void*)StubAllocator, (void*)StubAllocator, (void*)StubAllocator, (void*)StubAllocator,
+		(void*)StubAllocator, (void*)StubAllocator, (void*)StubAllocator, (void*)StubAllocator };
+	void* fauxAllocator = &fauxAllocatorVtable[0];
 
 	uint64_t* allocatorList = (uint64_t*)0x14514CE40; // TODO: Make me dynamic!
 	for (int i = 0; i < 64; i++) {
-		allocatorList[i] = allocatorList[1];
+		allocatorList[i] =  allocatorList[1]; //(uint64_t)&fauxAllocator;/
 	}
+
+	Sleep(3000);
 
 	std::set<std::string> excludedClasses = {
 		// Blocking:
-		"sKeyboard", "sOtomo", "nDraw::ExternalRegion"//, "uGuideInsect",
+		"sKeyboard", "sOtomo", "nDraw::ExternalRegion", "nDraw::IndexBuffer", "uGuideInsect",
+
+		/*
+		// Blocking:
+		"sKeyboard", "sOtomo", "nDraw::ExternalRegion", "nDraw::IndexBuffer", "uGuideInsect",
 
 		// "OK"-able prompts with SEH:
-		"nDraw::IndexBuffer", "nDraw::Scene", "nDraw::VertexBuffer", "sMhKeyboard",
-		"sMhMain", "sMhMouse", "sMhRender", "sMouse", "sRender"
+		"nDraw::Scene", "nDraw::VertexBuffer", "nDraw::ExternalRegion",
+		"sMhKeyboard","sMhMouse",
+		"sMhMain",  "sMhRender",
+		"sMouse", "sRender",
+		"sMhScene",
+		*/
 	};
 
 
@@ -149,27 +171,61 @@ DWORD WINAPI MyFunc(LPVOID lpvParam)
 				spdlog::info("{0} Properties:", key);
 
 				// Create a MtPropertyList to populate with the MtObject::PopulatePropertyList function.
-				Mt::MtPropertyList* propListInst = reinterpret_cast<Mt::MtPropertyList*>(dtis["MtPropertyList"]->NewInstance());
+				Mt::MtPropertyList* propListInst = nullptr;
 
-				Mt::MtObject* mtObj = val->NewInstance();
+				__try {
+					propListInst = reinterpret_cast<Mt::MtPropertyList*>(dtis["MtPropertyList"]->NewInstance());
+				}
+				__except (EXCEPTION_EXECUTE_HANDLER)
+				{
+					spdlog::error("Error instanciating MtPropertyList. BAD BAD BAD !!!!!!!!!!!!!!{0}", key);
+					spdlog::error("Error instanciating MtPropertyList. BAD BAD BAD !!!!!!!!!!!!!!{0}", key);
+					spdlog::error("Error instanciating MtPropertyList. BAD BAD BAD !!!!!!!!!!!!!!{0}", key);
+					spdlog::error("Error instanciating MtPropertyList. BAD BAD BAD !!!!!!!!!!!!!!{0}", key);
+					spdlog::error("Error instanciating MtPropertyList. BAD BAD BAD !!!!!!!!!!!!!!{0}", key);
+					Sleep(15000);
+					continue;
+				}
+
+
+
+				Mt::MtObject* mtObj = nullptr;
+				__try{
+					//mtObj = val->NewInstance();
+					mtObj = (Mt::MtObject*)val->CtorInstance(malloc(val->ClassSize()));
+				}
+				__except (EXCEPTION_EXECUTE_HANDLER)
+				{
+					spdlog::error("Got error instanciating {0}", key);
+					continue;
+				}
+
+
 				if (mtObj == nullptr) {
 					spdlog::error("{0}::DTI->NewInstance() == nullptr", key);
 				}
 				else {
-					mtObj->PopulatePropertyList(propListInst);
+					__try
+					{
+
+						mtObj->PopulatePropertyList(propListInst);
+					}
+					__except (EXCEPTION_EXECUTE_HANDLER)
+					{
+						spdlog::error("Got error populating property list for {0}", key);
+						continue;
+					}
 
 					if (propListInst->first_prop != nullptr) {
 						// Loop over the property list and output the info.
 						int i = 0;
 						for (Mt::MtProperty* prop = propListInst->first_prop; prop != nullptr; prop = prop->next) {
 
-
 							int64_t offset = -1;
 							if (prop->IsOffsetBased()) {
 								offset = ((uint64_t)prop->obj_inst_field_ptr_OR_FUNC_PTR) - ((uint64_t)prop->obj_inst_ptr);
 							}
-
-							//spdlog::info("\tProperty #{0}: (obj+:0x{1:X}) \"{2} {3};\"", i, offset, prop->GetTypeName(), prop->prop_name);
+							spdlog::info("\tProperty #{0}: (obj+:0x{1:X}) \"{2} {3};\"", i, offset, prop->GetTypeName(), prop->prop_name);
 							i++;
 						}
 					}
@@ -181,8 +237,12 @@ DWORD WINAPI MyFunc(LPVOID lpvParam)
 			}
 			__except (EXCEPTION_EXECUTE_HANDLER)
 			{
-				spdlog::error("Got SEH exception while printing properties for {0}:\n{1}", key);
+				spdlog::error("Got SEH exception while printing properties for {0}", key);
 			}
+		}
+		else
+		{
+			spdlog::error("No properties");
 		}
 	}
 

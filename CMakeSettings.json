@@ -23,7 +23,7 @@
       "ctestCommandArgs": "",
       "inheritEnvironments": [ "clang_cl_x64_x64" ],
       "variables": [],
-      "intelliSenseMode": "windows-clang-x64"
+      "intelliSenseMode": "windows-msvc-x64"
     },
     {
       "name": "x64-Clang-Debug",
@@ -36,7 +36,7 @@
       "ctestCommandArgs": "",
       "inheritEnvironments": [ "clang_cl_x64_x64" ],
       "variables": [],
-      "intelliSenseMode": "windows-clang-x64"
+      "intelliSenseMode": "windows-msvc-x64"
     }
   ]
 }

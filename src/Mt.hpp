@@ -60,6 +60,7 @@ namespace Mt {
 
 		uint32_t field_2C;
 		uint64_t field_30;
+
 		uint64_t field_38;
 		uint32_t field_40;
 		uint32_t field_44;
@@ -67,7 +68,12 @@ namespace Mt {
 		MtProperty* next;
 
 		const char* GetTypeName();
+		uint32_t GetFullFlags();
+		uint32_t GetCRC32();
 		bool IsOffsetBased();
+		bool IsArrayType();
+		bool IsGetterSetter();
+		int64_t GetFieldOffset();
 
 		enum class PropType
 		{
@@ -162,6 +168,4 @@ namespace Mt {
 
 	};
 	assert_size(MtPropertyList, 0x20);
-
-
 }

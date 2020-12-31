@@ -15,6 +15,10 @@ add_library(MHWClassPropDump SHARED
 	"src/Mt.hpp"
 	"src/Mt.cpp"
 	"src/size_assert.hpp"
+	"src/DTIDumper.hpp"
+	"src/DTIDumper.cpp"
+	"src/crc.c"
+	"src/crc.h"
 )
   
 target_include_directories (MHWClassPropDump PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)

@@ -1,15 +1,31 @@
 #include <cstdint>
 #include "Mt.hpp"
 #include "spdlog/spdlog.h"
+#include "crc.h"
 
 
 
 #define DTI_SIZE_MASK 0x7FFFFF
 #define DTI_FLAG_HAS_PROPS 0x20000000
 
-#define PROP_FLAG_BIT_18 0x20000
-#define PROP_FLAG_BIT_20 0x80000
+#define PROP_FLAG_BIT_18_IS_ARRAY 0x20000
+#define PROP_FLAG_BIT_20_IS_GETTER_SETTER 0x80000
 
+#define PROP_TYPE_MASK   0xFFF
+#define PROP_ALL_FLAGS_MASK = 0xFFFFF000
+
+
+/*
+v162.prop_name_str = (__int64)"InfiniteData";
+v162.obj_inst_field_ptr_OR_FUNC_PTR = (__int64)sub_1418AB140; -- getter
+v162.flags_and_type = 0x84001;
+v162.field_30 = (__int64)sub_1418AD570; -- some setter
+
+    111111111111 = 0x0FFF
+ 100000000000000 = 0x4000
+1000000000000000 = 0x8000
+
+*/
 namespace Mt {
 
     uint64_t MtDTI::ClassSize() {
@@ -33,8 +49,37 @@ namespace Mt {
         //return (this->flag_and_size_div_4 & 0x20000000) == 0;
     }
 
+    uint32_t MtProperty::GetFullFlags() {
+        return this->flags_and_type & 0xFFFFF000;
+    }
+
+    uint32_t MtProperty::GetCRC32() {
+        return get_cstr_crc(this->prop_name);
+    }
+
+    int64_t MtProperty::GetFieldOffset() {
+        if (this->IsOffsetBased()) {
+            return ((uint64_t)this->obj_inst_field_ptr_OR_FUNC_PTR) - ((uint64_t)this->obj_inst_ptr);
+        }
+        else {
+            return INT64_MAX;
+        }
+    }
+
+    bool MtProperty::IsOffsetBased() {
+        return /*(this->flags_and_type & PROP_FLAG_BIT_18) == 0 &&*/ (this->flags_and_type & PROP_FLAG_BIT_20_IS_GETTER_SETTER) == 0;
+    }
+
+    bool MtProperty::IsArrayType() {
+        return (this->flags_and_type & PROP_FLAG_BIT_18_IS_ARRAY) != 0;
+    }
+
+    bool MtProperty::IsGetterSetter() {
+        return (this->flags_and_type & PROP_FLAG_BIT_20_IS_GETTER_SETTER) != 0;
+    }
+
 	const char* MtProperty::GetTypeName() {
-		switch ((PropType)(this->flags_and_type & 0xFFF))
+		switch ((PropType)(this->flags_and_type & PROP_TYPE_MASK))
 		{
         case PropType::undefined:
             return "undefined";
@@ -194,8 +239,4 @@ namespace Mt {
 			break;
 		}
 	}
-
-    bool MtProperty::IsOffsetBased() {
-        return /*(this->flags_and_type & PROP_FLAG_BIT_18) == 0 &&*/ (this->flags_and_type & PROP_FLAG_BIT_20) == 0;
-    }
 }

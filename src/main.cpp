@@ -4,9 +4,11 @@
 #include <iostream>
 #include <map>
 #include <set>
+#include <memory>
 #include "spdlog/spdlog.h"
 #include "SigScan.hpp"
 #include "Mt.hpp"
+#include "DTIDumper.hpp"
 
 // Open new console for c(in/out/err)
 void OpenConsole()
@@ -27,7 +29,6 @@ void OpenConsole()
 	// Enable buffering to prevent VS from chopping up UTF-8 byte sequences
 	setvbuf(stdout, nullptr, _IOFBF, 1000);
 }
-
 
 std::map<std::string, Mt::MtDTI*> GetFlattenedDtiMap() {
 	// Get the image base.
@@ -65,67 +66,29 @@ std::map<std::string, Mt::MtDTI*> GetFlattenedDtiMap() {
 	return dtis;
 }
 
-
-// https://stackoverflow.com/a/16684288
-void PauseAllOtherThreads() {
-	DWORD targetProcessId = GetCurrentProcessId();
-	DWORD targetThreadId = GetCurrentThreadId();
-
-	HANDLE h = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-	if (h != INVALID_HANDLE_VALUE)
-	{
-		THREADENTRY32 te;
-		te.dwSize = sizeof(te);
-		if (Thread32First(h, &te))
-		{
-			do
-			{
-				if (te.dwSize >= FIELD_OFFSET(THREADENTRY32, th32OwnerProcessID) + sizeof(te.th32OwnerProcessID))
-				{
-					// Suspend all threads EXCEPT the one we want to keep running
-					if (te.th32ThreadID != targetThreadId && te.th32OwnerProcessID == targetProcessId)
-					{
-						HANDLE thread = ::OpenThread(THREAD_ALL_ACCESS, FALSE, te.th32ThreadID);
-						if (thread != NULL)
-						{
-							//spdlog::info("Suspending thread #{0}", te.th32ThreadID);
-							SuspendThread(thread);
-							CloseHandle(thread);
-						}
-					}
-				}
-				te.dwSize = sizeof(te);
-			} while (Thread32Next(h, &te));
-		}
-		CloseHandle(h);
-	}
-}
-
-void* __fastcall StubAllocator(void* cThis, uint64_t size, uint64_t align, uint64_t crc, uint32_t unk0, uint32_t unk1, char* className) {
-	spdlog::info("StubAllocator - Allocating {0} bytes for {1}", size, className);
-	return malloc(size);
-}
-
-
 DWORD WINAPI MyFunc(LPVOID lpvParam)
 {
 	OpenConsole();
 	spdlog::info("Ando's MHWClassPropDump Started!");
 
+	auto dumper = std::make_unique<DTIDumper::DTIDumper>();
+
+	dumper->ParseDTI();
+	dumper->DumpToFile("dump.txt");
+
+	return 0;
+}
+
+DWORD WINAPI MyFuncOld(LPVOID lpvParam){
 	//PauseAllOtherThreads();
 	//spdlog::info("Suspended all other threads.");
 
-	void* fauxAllocatorVtable[16] = {
-		(void*)StubAllocator, (void*)StubAllocator, (void*)StubAllocator, (void*)StubAllocator,
-		(void*)StubAllocator, (void*)StubAllocator, (void*)StubAllocator, (void*)StubAllocator,
-		(void*)StubAllocator, (void*)StubAllocator, (void*)StubAllocator, (void*)StubAllocator,
-		(void*)StubAllocator, (void*)StubAllocator, (void*)StubAllocator, (void*)StubAllocator };
-	void* fauxAllocator = &fauxAllocatorVtable[0];
-
+	
 	uint64_t* allocatorList = (uint64_t*)0x14514CE40; // TODO: Make me dynamic!
 	for (int i = 0; i < 64; i++) {
 		allocatorList[i] =  allocatorList[1]; //(uint64_t)&fauxAllocator;/
 	}
+	
 
 	Sleep(3000);
 
@@ -134,9 +97,6 @@ DWORD WINAPI MyFunc(LPVOID lpvParam)
 		"sKeyboard", "sOtomo", "nDraw::ExternalRegion", "nDraw::IndexBuffer", "uGuideInsect",
 
 		/*
-		// Blocking:
-		"sKeyboard", "sOtomo", "nDraw::ExternalRegion", "nDraw::IndexBuffer", "uGuideInsect",
-
 		// "OK"-able prompts with SEH:
 		"nDraw::Scene", "nDraw::VertexBuffer", "nDraw::ExternalRegion",
 		"sMhKeyboard","sMhMouse",
@@ -225,7 +185,7 @@ DWORD WINAPI MyFunc(LPVOID lpvParam)
 							if (prop->IsOffsetBased()) {
 								offset = ((uint64_t)prop->obj_inst_field_ptr_OR_FUNC_PTR) - ((uint64_t)prop->obj_inst_ptr);
 							}
-							spdlog::info("\tProperty #{0}: (obj+:0x{1:X}) \"{2} {3};\"", i, offset, prop->GetTypeName(), prop->prop_name);
+							//spdlog::info("\tProperty #{0}: (obj+:0x{1:X}) \"{2} {3};\"", i, offset, prop->GetTypeName(), prop->prop_name);
 							i++;
 						}
 					}
@@ -246,31 +206,7 @@ DWORD WINAPI MyFunc(LPVOID lpvParam)
 		}
 	}
 
-	spdlog::info("Completed!!!!");
-
-	/*
-	Mt::MtPropertyList* propListInst = reinterpret_cast<Mt::MtPropertyList*>(dtis["MtPropertyList"]->NewInstance());
-	spdlog::info("MtPropertyList new instance: {0:X}", (uint64_t)propListInst);
-
-	Mt::MtObject* x = dtis["cLifeSimDesireTarget"]->NewInstance();
-	x->PopulatePropertyList(propListInst);
-
-
-	spdlog::info("cLifeSimDesireTarget properties:");
-	int i = 0;
-	for (Mt::MtProperty* prop = propListInst->first_prop; prop != nullptr; prop = prop->next) {
-
-		int64_t offset = -1;
-		if (prop->IsOffsetBased()) {
-			offset = ((uint64_t)prop->obj_inst_field_ptr_OR_FUNC_PTR) - ((uint64_t)prop->obj_inst_ptr);
-		}
-
-		spdlog::info("\tProperty #{0}: (obj+:0x{1:X}) \"{2} {3};\"", i, offset, prop->GetTypeName(), prop->prop_name);
-		i++;
-	}
-	*/
-
-
+	spdlog::info("Completed!");
 	return 0;
 }
 

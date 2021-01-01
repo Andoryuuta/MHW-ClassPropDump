@@ -161,7 +161,7 @@ namespace DTIDumper {
 
 		// Output as text.
 		for (const auto& rec : class_records) {
-			// Generate the C++ styled inheritance chain.
+			// Generate the C++ styled inheritance chain for comment.
 			std::stringstream inheritance;
 			Mt::MtDTI* cur = rec.dti;
 			if (cur->class_name != nullptr && std::strlen(cur->class_name) != 0) {
@@ -178,9 +178,9 @@ namespace DTIDumper {
 			inheritanceString.resize(inheritanceString.size() - 2);
 
 			// Output the class + properties to the file.
-			//spdlog::info("{0} (vftable:{1:X})", rec.dti->class_name, (uint64_t)rec.class_vftable);
 			try
 			{
+				// Output calculated CRC if it differs from the value in memory (MtDTI constructor allows CRC overrides, though these appear to be unused).
 				uint32_t classNameJAMCRC = (get_cstr_crc(rec.dti->class_name) & 0x7FFFFFFF);
 				if (rec.dti->crc_hash == classNameJAMCRC) {
 					file << fmt::format("// {0} vftable:0x{1:X}, Size:0x{2:X}, CRC32:0x{3:X}\n", rec.dti->class_name, (uint64_t)rec.class_vftable, rec.dti->ClassSize(), rec.dti->crc_hash);
@@ -195,11 +195,20 @@ namespace DTIDumper {
 				for (const auto& prop : rec.properties) {
 					std::string typeAndName = fmt::format("{0} '{1}'", prop->GetTypeName(), prop->prop_name);
 					if (prop->IsArrayType()) {
-						std::string varString = fmt::format("{0}[{1}]", typeAndName, prop->field_28_count);
-						file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, Array, CRC32:0x{2:X}, Flags:0x{3:X}\n", varString, prop->GetFieldOffset(), prop->GetCRC32(), prop->GetFullFlags());
+						if (prop->IsGetterSetter()) {
+							// Dynamic array
+							std::string varString = fmt::format("{0}[*]", typeAndName, prop->data.var.count);
+							file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, DynamicArray, Getter:0x{2:X}, Setter:0x{3:X}, GetCount:0x{4:X}, Reallocate:0x{5:X} CRC32:0x{5:X}, Flags:0x{6:X}\n", varString, prop->GetFieldOffset(), prop->data.gs.fp_get, prop->data.gs.fp_set, prop->data.gs.fp_get_count, prop->data.gs.fp_dynamic_allocation, prop->GetCRC32(), prop->GetFullFlags());
+						}
+						else
+						{
+							// Static/fixed-length array
+							std::string varString = fmt::format("{0}[{1}]", typeAndName, prop->data.var.count);
+							file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, Array, CRC32:0x{2:X}, Flags:0x{3:X}\n", varString, prop->GetFieldOffset(), prop->GetCRC32(), prop->GetFullFlags());
+						}
 					}
 					else if (prop->IsGetterSetter()) {
-						file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, PSEUDO-PROP, Getter:0x{2:X}, Setter:0x{3:X}, CRC32:0x{4:X}, Flags:0x{5:X}\n", typeAndName, prop->GetFieldOffset(), (uint64_t)prop->obj_inst_field_ptr_OR_FUNC_PTR, (uint64_t)prop->field_30, prop->GetCRC32(), prop->GetFullFlags());
+						file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, PSEUDO-PROP, Getter:0x{2:X}, Setter:0x{3:X}, CRC32:0x{4:X}, Flags:0x{5:X}\n", typeAndName, prop->GetFieldOffset(), (uint64_t)prop->data.gs.fp_get, (uint64_t)prop->data.gs.fp_set, prop->GetCRC32(), prop->GetFullFlags());
 					}
 					else {
 						file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, Var, CRC32:0x{2:X}, Flags:0x{3:X}\n", typeAndName, prop->GetFieldOffset(), prop->GetCRC32(), prop->GetFullFlags());

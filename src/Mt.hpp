@@ -55,13 +55,23 @@ namespace Mt {
 		// A union likely starts around here.
 		// These same offsets are used for different purposes depending on the circumstances.
 		void* obj_inst_ptr;
-		void* obj_inst_field_ptr_OR_FUNC_PTR;
-		uint32_t field_28_count;
 
-		uint32_t field_2C;
-		uint64_t field_30;
+		union {
+			// Getter / setter
+			struct {
+				uint64_t fp_get;
+				uint64_t fp_get_count;
+				uint64_t fp_set;
+				uint64_t fp_dynamic_allocation;
+			} gs;
 
-		uint64_t field_38;
+			// plain struct-offset variable
+			struct {
+				void* obj_inst_field;
+				uint32_t count; // Array count if ARRAY property, else some function ptr.
+			} var;
+		} data;
+
 		uint32_t field_40;
 		uint32_t field_44;
 		uint64_t field_48;

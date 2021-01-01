@@ -8,49 +8,28 @@
 #define DTI_SIZE_MASK 0x7FFFFF
 #define DTI_FLAG_HAS_PROPS 0x20000000
 
-#define PROP_FLAG_BIT_18_IS_ARRAY 0x20000
+#define PROP_FLAG_BIT_18_IS_ARRAY         0x20000
 #define PROP_FLAG_BIT_20_IS_GETTER_SETTER 0x80000
 
-#define PROP_TYPE_MASK   0xFFF
-#define PROP_ALL_FLAGS_MASK = 0xFFFFF000
+#define PROP_TYPE_MASK      0xFFF
+#define PROP_ALL_FLAGS_MASK 0xFFFFF000
 
 
 /*
-v162.prop_name_str = (__int64)"InfiniteData";
-v162.obj_inst_field_ptr_OR_FUNC_PTR = (__int64)sub_1418AB140; -- getter
-v162.flags_and_type = 0x84001;
-v162.field_30 = (__int64)sub_1418AD570; -- some setter
-
     111111111111 = 0x0FFF
  100000000000000 = 0x4000
 1000000000000000 = 0x8000
-
 */
+
+
 namespace Mt {
 
     uint64_t MtDTI::ClassSize() {
         return (this->flag_and_size_div_4 & DTI_SIZE_MASK) << 2;
     }
 
-    bool MtDTI::HasProperties() {
-        MtDTI* cur = this;
-        do {
-            spdlog::info("MtDTI::HasProperties() -- checking node {0:X} ({1}), flags: {2:b}", (uint64_t)cur, cur->class_name, (cur->flag_and_size_div_4& 0x7F800000)>>23);
-
-            /*
-            if (this->flag_and_size_div_4 & DTI_FLAG_HAS_PROPS) {
-                return false;
-            }*/
-
-            cur = cur->parent;
-        } while (cur != nullptr && cur->parent != cur);
-
-        return true;
-        //return (this->flag_and_size_div_4 & 0x20000000) == 0;
-    }
-
     uint32_t MtProperty::GetFullFlags() {
-        return this->flags_and_type & 0xFFFFF000;
+        return this->flags_and_type & PROP_ALL_FLAGS_MASK;
     }
 
     uint32_t MtProperty::GetCRC32() {
@@ -59,9 +38,11 @@ namespace Mt {
 
     int64_t MtProperty::GetFieldOffset() {
         if (this->IsOffsetBased()) {
-            return ((uint64_t)this->obj_inst_field_ptr_OR_FUNC_PTR) - ((uint64_t)this->obj_inst_ptr);
+            return ((uint64_t)this->data.var.obj_inst_field) - ((uint64_t)this->obj_inst_ptr);
         }
-        else {
+        else
+        {
+            // Return max value if not offset based.
             return INT64_MAX;
         }
     }

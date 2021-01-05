@@ -12,6 +12,8 @@ The program will try to instanciate every class in the game binary (with DTI inf
 
 When finished, it will dump a file `dti_prop_dump.h` into the game folder. 
 
+Versioned/diffable versions of the dumps are available at [https://github.com/Andoryuuta/MHW-DTI-Dumps](https://github.com/Andoryuuta/MHW-DTI-Dumps)
+
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 

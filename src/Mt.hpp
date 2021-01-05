@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <string>
 #include "size_assert.hpp"
 
 namespace Mt {
@@ -25,7 +26,7 @@ namespace Mt {
 		virtual void* CtorInstanceArray(void* obj, int64_t count) = 0;
 
 		uint64_t ClassSize();
-		bool HasProperties();
+		bool IsSubclassOf(std::string className);
 	};
 	assert_size(MtDTI, 0x38);
 
@@ -43,7 +44,6 @@ namespace Mt {
 		virtual bool GetDTI(MtPropertyList*) = 0;
 	};
 	assert_size(MtObject, 0x8);
-
 
 	class MtProperty {
 	public:

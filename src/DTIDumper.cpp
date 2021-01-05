@@ -52,6 +52,8 @@ namespace DTIDumper {
 		uint32_t disp = *(uint32_t*)(hashTableAOB + 3);
 		this->mt_dti_hash_table = (Mt::MtDTIHashTable*)(hashTableAOB + disp + 7);
 		spdlog::info("mt_dti_hash_table: {0:x}", (uint64_t)mt_dti_hash_table);
+
+		class_records = GetClassRecords();
 	}
 
 	std::vector<ClassRecord> DTIDumper::GetClassRecords() {
@@ -148,10 +150,10 @@ namespace DTIDumper {
 	}
 
 	void DTIDumper::DumpToFile(std::string filename) {
-		auto class_records = GetClassRecords();
+		//auto class_records = GetClassRecords();
 
 		spdlog::info("Starting file dump.");
-		Sleep(5000);
+		Sleep(1000);
 
 		std::ofstream file;
 		file.open(filename, std::ios::out | std::ios::trunc);
@@ -198,7 +200,7 @@ namespace DTIDumper {
 						if (prop->IsGetterSetter()) {
 							// Dynamic array
 							std::string varString = fmt::format("{0}[*]", typeAndName, prop->data.var.count);
-							file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, DynamicArray, Getter:0x{2:X}, Setter:0x{3:X}, GetCount:0x{4:X}, Reallocate:0x{5:X} CRC32:0x{5:X}, Flags:0x{6:X}\n", varString, prop->GetFieldOffset(), prop->data.gs.fp_get, prop->data.gs.fp_set, prop->data.gs.fp_get_count, prop->data.gs.fp_dynamic_allocation, prop->GetCRC32(), prop->GetFullFlags());
+							file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, DynamicArray, Getter:0x{2:X}, Setter:0x{3:X}, GetCount:0x{4:X}, Reallocate:0x{5:X} CRC32:0x{6:X}, Flags:0x{7:X}\n", varString, prop->GetFieldOffset(), prop->data.gs.fp_get, prop->data.gs.fp_set, prop->data.gs.fp_get_count, prop->data.gs.fp_dynamic_allocation, prop->GetCRC32(), prop->GetFullFlags());
 						}
 						else
 						{
@@ -228,6 +230,121 @@ namespace DTIDumper {
 		spdlog::info("Done dumping classes!");
 	}
 
+	void DTIDumper::DumpDiffableFile(std::string filename) {
+		spdlog::info("Starting diffable file dump.");
+		Sleep(1000);
+
+		std::ofstream file;
+		file.open(filename, std::ios::out | std::ios::trunc);
+
+		file << fmt::format("// Ando's MHW ClassPropDump log [{}]\n", GetDateTime());
+		file << fmt::format("// Image Base: {:#X}\n\n", this->image_base);
+
+		// Output as text.
+		for (const auto& rec : class_records) {
+			// Generate the C++ styled inheritance chain for comment.
+			std::stringstream inheritance;
+			Mt::MtDTI* cur = rec.dti;
+			if (cur->class_name != nullptr && std::strlen(cur->class_name) != 0) {
+				inheritance << ": ";
+			}
+			cur = cur->parent;
+			while (cur != nullptr && cur->parent != cur) {
+				if (cur->class_name != nullptr && std::strlen(cur->class_name) != 0) {
+					inheritance << cur->class_name << ", ";
+				}
+				cur = cur->parent;
+			}
+			std::string inheritanceString = inheritance.str();
+			inheritanceString.resize(inheritanceString.size() - 2);
+
+			// Output the class + properties to the file.
+			try
+			{
+				// Output calculated CRC if it differs from the value in memory (MtDTI constructor allows CRC overrides, though these appear to be unused).
+				uint32_t classNameJAMCRC = (get_cstr_crc(rec.dti->class_name) & 0x7FFFFFFF);
+				if (rec.dti->crc_hash == classNameJAMCRC) {
+					file << fmt::format("// {0} Size:0x{2:X}, CRC32:0x{3:X}\n", rec.dti->class_name, (uint64_t)rec.class_vftable, rec.dti->ClassSize(), rec.dti->crc_hash);
+				}
+				else {
+					file << fmt::format("// {0} Size:0x{2:X}, CRC32:0x{3:X}, CalcCRC:0x{4:X}\n", rec.dti->class_name, (uint64_t)rec.class_vftable, rec.dti->ClassSize(), rec.dti->crc_hash, classNameJAMCRC);
+				}
+
+				file << fmt::format("class {} /*{}*/ {{\n", rec.dti->class_name, inheritanceString);
+
+				// Different formatting based on the property type.
+				for (const auto& prop : rec.properties) {
+					std::string typeAndName = fmt::format("{0} '{1}'", prop->GetTypeName(), prop->prop_name);
+					if (prop->IsArrayType()) {
+						if (prop->IsGetterSetter()) {
+							// Dynamic array
+							std::string varString = fmt::format("{0}[*]", typeAndName, prop->data.var.count);
+							file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, DynamicArray, CRC32:0x{2:X}, Flags:0x{3:X}\n", varString, prop->GetFieldOffset(), prop->GetCRC32(), prop->GetFullFlags());
+						}
+						else
+						{
+							// Static/fixed-length array
+							std::string varString = fmt::format("{0}[{1}]", typeAndName, prop->data.var.count);
+							file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, Array, CRC32:0x{2:X}, Flags:0x{3:X}\n", varString, prop->GetFieldOffset(), prop->GetCRC32(), prop->GetFullFlags());
+						}
+					}
+					else if (prop->IsGetterSetter()) {
+						file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, PSEUDO-PROP, CRC32:0x{2:X}, Flags:0x{3:X}\n", typeAndName, prop->GetFieldOffset(), prop->GetCRC32(), prop->GetFullFlags());
+					}
+					else {
+						file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, Var, CRC32:0x{2:X}, Flags:0x{3:X}\n", typeAndName, prop->GetFieldOffset(), prop->GetCRC32(), prop->GetFullFlags());
+					}
+				}
+
+				file << fmt::format("}};\n\n", rec.dti->class_name);
+			}
+			catch (const std::exception& e)
+			{
+				spdlog::error("Error: {}", e.what());
+				Sleep(5000);
+			}
+		}
+		file << fmt::format("// END OF FILE");
+
+		spdlog::info("Done dumping classes!");
+	}
+
+	void DTIDumper::DumpResourceInformation(std::string filename) {
+		std::ofstream file;
+		file.open(filename, std::ios::out | std::ios::trunc);
+
+		file << fmt::format("// cResource subclass information. [{}]\n", GetDateTime());
+		file << fmt::format("// Image Base: {:#X}\n\n", this->image_base);
+
+		spdlog::info("Dumping resource information classes!");
+		// Output as text.
+		for (const auto& rec : class_records) {
+			__try {
+				auto isResourceClass = rec.dti->IsSubclassOf("cResource");
+
+				//spdlog::info("is resource class? {0} - {1}", rec.dti->class_name, isResourceClass);
+
+				if (isResourceClass) {
+					if (rec.class_vftable != nullptr) {
+						uint64_t addr = *(uint64_t*)(((uint64_t)rec.class_vftable) + (8 * 6));
+						typedef char* (*GetResourceExtension_t)();
+						GetResourceExtension_t GetExt = (GetResourceExtension_t)(addr);
+						char* ext = GetExt();
+
+						file << fmt::format("Class [{0}], file extension: {1}\n", rec.dti->class_name, ext);
+						file.flush();
+					}
+				}
+			}
+			__except (EXCEPTION_EXECUTE_HANDLER)
+			{
+				spdlog::error("Error dumping resource information!");
+				Sleep(5000);
+				continue;
+			}
+		}
+		spdlog::info("Done dumping resource information classes!");
+	}
 
 	std::map<std::string, Mt::MtDTI*> DTIDumper::GetFlattenedDtiMap() {
 		// Iterate over the hash buckets to build a flat lookup map

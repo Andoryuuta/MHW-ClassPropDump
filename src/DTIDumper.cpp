@@ -131,8 +131,8 @@ namespace DTIDumper {
 					}
 				}
 
-				std::sort(properties.begin(), properties.end(), [](const auto& lhs, const auto& rhs) {
-					return lhs->GetFieldOffset() < rhs->GetFieldOffset();
+				std::sort(properties.begin(), properties.end(), [&](const auto& lhs, const auto& rhs) {
+					return lhs->GetFieldOffsetFrom((uint64_t)obj) < rhs->GetFieldOffsetFrom((uint64_t)obj);
 				});
 
 
@@ -195,25 +195,36 @@ namespace DTIDumper {
 
 				// Different formatting based on the property type.
 				for (const auto& prop : rec.properties) {
+
+					if (prop->prop_comment != nullptr) {
+						file << fmt::format("\t// Comment: {0}\n", prop->prop_comment);
+					}
+
 					std::string typeAndName = fmt::format("{0} '{1}'", prop->GetTypeName(), prop->prop_name);
+					//int64_t cappedOffset = prop->GetFieldOffset();
+					int64_t cappedOffset = prop->GetFieldOffsetFrom((uint64_t)rec.obj_instance);
+					if (cappedOffset < 0 || cappedOffset > rec.dti->ClassSize()) {
+						cappedOffset = INT64_MAX;
+					}
+
 					if (prop->IsArrayType()) {
 						if (prop->IsGetterSetter()) {
 							// Dynamic array
 							std::string varString = fmt::format("{0}[*]", typeAndName, prop->data.var.count);
-							file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, DynamicArray, Getter:0x{2:X}, Setter:0x{3:X}, GetCount:0x{4:X}, Reallocate:0x{5:X} CRC32:0x{6:X}, Flags:0x{7:X}\n", varString, prop->GetFieldOffset(), prop->data.gs.fp_get, prop->data.gs.fp_set, prop->data.gs.fp_get_count, prop->data.gs.fp_dynamic_allocation, prop->GetCRC32(), prop->GetFullFlags());
+							file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, DynamicArray, Getter:0x{2:X}, Setter:0x{3:X}, GetCount:0x{4:X}, Reallocate:0x{5:X} CRC32:0x{6:X}, Flags:0x{7:X}\n", varString, cappedOffset, prop->data.gs.fp_get, prop->data.gs.fp_set, prop->data.gs.fp_get_count, prop->data.gs.fp_dynamic_allocation, prop->GetCRC32(), prop->GetFullFlags());
 						}
 						else
 						{
 							// Static/fixed-length array
 							std::string varString = fmt::format("{0}[{1}]", typeAndName, prop->data.var.count);
-							file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, Array, CRC32:0x{2:X}, Flags:0x{3:X}\n", varString, prop->GetFieldOffset(), prop->GetCRC32(), prop->GetFullFlags());
+							file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, Array, CRC32:0x{2:X}, Flags:0x{3:X}\n", varString, cappedOffset, prop->GetCRC32(), prop->GetFullFlags());
 						}
 					}
 					else if (prop->IsGetterSetter()) {
-						file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, PSEUDO-PROP, Getter:0x{2:X}, Setter:0x{3:X}, CRC32:0x{4:X}, Flags:0x{5:X}\n", typeAndName, prop->GetFieldOffset(), (uint64_t)prop->data.gs.fp_get, (uint64_t)prop->data.gs.fp_set, prop->GetCRC32(), prop->GetFullFlags());
+						file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, PSEUDO-PROP, Getter:0x{2:X}, Setter:0x{3:X}, CRC32:0x{4:X}, Flags:0x{5:X}\n", typeAndName, cappedOffset, (uint64_t)prop->data.gs.fp_get, (uint64_t)prop->data.gs.fp_set, prop->GetCRC32(), prop->GetFullFlags());
 					}
 					else {
-						file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, Var, CRC32:0x{2:X}, Flags:0x{3:X}\n", typeAndName, prop->GetFieldOffset(), prop->GetCRC32(), prop->GetFullFlags());
+						file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, Var, CRC32:0x{2:X}, Flags:0x{3:X}\n", typeAndName, cappedOffset, prop->GetCRC32(), prop->GetFullFlags());
 					}
 				}
 
@@ -230,15 +241,18 @@ namespace DTIDumper {
 		spdlog::info("Done dumping classes!");
 	}
 
-	void DTIDumper::DumpDiffableFile(std::string filename) {
-		spdlog::info("Starting diffable file dump.");
+	void DTIDumper::DumpPythonArrayFile(std::string filename) {
+		spdlog::info("Starting python tuple list file dump.");
 		Sleep(1000);
 
 		std::ofstream file;
 		file.open(filename, std::ios::out | std::ios::trunc);
 
-		file << fmt::format("// Ando's MHW ClassPropDump log [{}]\n", GetDateTime());
-		file << fmt::format("// Image Base: {:#X}\n\n", this->image_base);
+		file << fmt::format("# Ando's MHW ClassPropDump log [{}]\n", GetDateTime());
+		file << fmt::format("# Image Base: {:#X}\n\n", this->image_base);
+		file << fmt::format("# class name, vftable address, dti address\n.");
+
+		file << fmt::format("dti_data = [");
 
 		// Output as text.
 		for (const auto& rec : class_records) {
@@ -261,42 +275,9 @@ namespace DTIDumper {
 			// Output the class + properties to the file.
 			try
 			{
-				// Output calculated CRC if it differs from the value in memory (MtDTI constructor allows CRC overrides, though these appear to be unused).
-				uint32_t classNameJAMCRC = (get_cstr_crc(rec.dti->class_name) & 0x7FFFFFFF);
-				if (rec.dti->crc_hash == classNameJAMCRC) {
-					file << fmt::format("// {0} Size:0x{2:X}, CRC32:0x{3:X}\n", rec.dti->class_name, (uint64_t)rec.class_vftable, rec.dti->ClassSize(), rec.dti->crc_hash);
-				}
-				else {
-					file << fmt::format("// {0} Size:0x{2:X}, CRC32:0x{3:X}, CalcCRC:0x{4:X}\n", rec.dti->class_name, (uint64_t)rec.class_vftable, rec.dti->ClassSize(), rec.dti->crc_hash, classNameJAMCRC);
-				}
-
-				file << fmt::format("class {} /*{}*/ {{\n", rec.dti->class_name, inheritanceString);
-
-				// Different formatting based on the property type.
-				for (const auto& prop : rec.properties) {
-					std::string typeAndName = fmt::format("{0} '{1}'", prop->GetTypeName(), prop->prop_name);
-					if (prop->IsArrayType()) {
-						if (prop->IsGetterSetter()) {
-							// Dynamic array
-							std::string varString = fmt::format("{0}[*]", typeAndName, prop->data.var.count);
-							file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, DynamicArray, CRC32:0x{2:X}, Flags:0x{3:X}\n", varString, prop->GetFieldOffset(), prop->GetCRC32(), prop->GetFullFlags());
-						}
-						else
-						{
-							// Static/fixed-length array
-							std::string varString = fmt::format("{0}[{1}]", typeAndName, prop->data.var.count);
-							file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, Array, CRC32:0x{2:X}, Flags:0x{3:X}\n", varString, prop->GetFieldOffset(), prop->GetCRC32(), prop->GetFullFlags());
-						}
-					}
-					else if (prop->IsGetterSetter()) {
-						file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, PSEUDO-PROP, CRC32:0x{2:X}, Flags:0x{3:X}\n", typeAndName, prop->GetFieldOffset(), prop->GetCRC32(), prop->GetFullFlags());
-					}
-					else {
-						file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, Var, CRC32:0x{2:X}, Flags:0x{3:X}\n", typeAndName, prop->GetFieldOffset(), prop->GetCRC32(), prop->GetFullFlags());
-					}
-				}
-
-				file << fmt::format("}};\n\n", rec.dti->class_name);
+				
+				file << fmt::format("('{0}', 0x{1:X}, 0x{2:X}),\n", rec.dti->class_name, (uint64_t)rec.class_vftable, (uint64_t)rec.dti);
+				
 			}
 			catch (const std::exception& e)
 			{
@@ -304,7 +285,8 @@ namespace DTIDumper {
 				Sleep(5000);
 			}
 		}
-		file << fmt::format("// END OF FILE");
+		file << fmt::format("]");
+		file << fmt::format("# END OF FILE");
 
 		spdlog::info("Done dumping classes!");
 	}

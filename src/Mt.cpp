@@ -45,9 +45,20 @@ namespace Mt {
         return get_cstr_crc(this->prop_name);
     }
 
-    int64_t MtProperty::GetFieldOffset() {
+    int64_t MtProperty::GetRelativeFieldOffset() {
         if (this->IsOffsetBased()) {
             return ((uint64_t)this->data.var.obj_inst_field) - ((uint64_t)this->obj_inst_ptr);
+        }
+        else
+        {
+            // Return max value if not offset based.
+            return INT64_MAX;
+        }
+    }
+
+    int64_t MtProperty::GetFieldOffsetFrom(uint64_t base) {
+        if (this->IsOffsetBased()) {
+            return ((uint64_t)this->data.var.obj_inst_field) - base;
         }
         else
         {

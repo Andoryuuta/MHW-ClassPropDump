@@ -35,7 +35,7 @@ DWORD WINAPI MyFunc(LPVOID lpvParam)
 
 	dumper->ParseDTI();
 	dumper->DumpToFile("dti_prop_dump.h");
-	dumper->DumpDiffableFile("dti_prop_dump_diffable.h");
+	dumper->DumpPythonArrayFile("dti_data.py");
 	dumper->DumpResourceInformation("cresource_info.txt");
 
 	return 0;

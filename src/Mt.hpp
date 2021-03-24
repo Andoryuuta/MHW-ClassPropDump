@@ -48,7 +48,7 @@ namespace Mt {
 	class MtProperty {
 	public:
 		char* prop_name;
-		uint64_t field_8;
+		char* prop_comment;
 		uint32_t flags_and_type;
 		uint32_t field_14;
 
@@ -83,7 +83,8 @@ namespace Mt {
 		bool IsOffsetBased();
 		bool IsArrayType();
 		bool IsGetterSetter();
-		int64_t GetFieldOffset();
+		int64_t GetRelativeFieldOffset();
+		int64_t GetFieldOffsetFrom(uint64_t base);
 
 		enum class PropType
 		{

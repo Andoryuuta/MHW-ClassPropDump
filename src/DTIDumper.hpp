@@ -22,7 +22,7 @@ namespace DTIDumper {
 
 		void ParseDTI();
 		void DumpToFile(std::string filename);
-		void DumpDiffableFile(std::string filename);
+		void DumpPythonArrayFile(std::string filename);
 		void DumpResourceInformation(std::string filename);
 
 		std::vector<ClassRecord> GetClassRecords();

@@ -34,8 +34,10 @@ DWORD WINAPI MyFunc(LPVOID lpvParam)
 	auto dumper = std::make_unique<DTIDumper::DTIDumper>();
 
 	dumper->ParseDTI();
+	//dumper->DumpRawInfo("dti_dump_raw.json");
+
 	dumper->DumpToFile("dti_prop_dump.h");
-	dumper->DumpPythonArrayFile("dti_data.py");
+	//dumper->DumpPythonArrayFile("dti_data.py");
 	dumper->DumpResourceInformation("cresource_info.txt");
 
 	return 0;

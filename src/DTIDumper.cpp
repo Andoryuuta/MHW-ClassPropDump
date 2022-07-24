@@ -3,6 +3,7 @@
 #include <Windows.h>
 #include <cstdint>
 #include <vector>
+#include <map>
 #include <algorithm>
 #include <iostream>
 #include <iomanip>
@@ -14,6 +15,7 @@
 #include "SigScan.hpp"
 #include "Mt.hpp"
 #include "crc.h"
+#include "config.h"
 
 std::string GetDateTime() {
 	time_t t = std::time(nullptr);
@@ -25,6 +27,10 @@ std::string GetDateTime() {
 }
 
 namespace DTIDumper {
+
+	uint64_t GetVftableByInstanciation(Mt::MtDTI* dti);
+	void PopulateClassRecordProperties(ClassRecord* cr, std::map<std::string, Mt::MtDTI*>* dtiMap);
+
 	DTIDumper::DTIDumper()
 	{
 		image_base = 0;
@@ -41,11 +47,19 @@ namespace DTIDumper {
 		this->image_base = (uint64_t)GetModuleHandle(NULL);
 		spdlog::info("Image Base: {0:x}", image_base);
 
+
+		SigScan::SuspendThreads();
+
 		// Sig scan for the DTI hash table.
 		// 48 8D 0D F778F002 - lea rcx,[MonsterHunterWorld.exe+50930D0]
-		uint64_t hashTableAOB = SigScan::Scan(image_base, "48 8D ?? ?? ?? ?? 02 48 8D 0C C1 48 8B 01 48 85 C0 74 06 48 8D 48 28 EB F2");
+		uint64_t hashTableAOB = NULL;
+		hashTableAOB = SigScan::Scan(image_base, "48 8D ?? ?? ?? ?? 02 48 8D 0C C1 48 8B 01 48 85 C0 74 06 48 8D 48 28 EB F2");
 		if (hashTableAOB == 0) {
-			spdlog::critical("Failed to get MtDTI hash table");
+			// Monster Hunter Stories 2 initial PC release:
+			hashTableAOB = SigScan::Scan(image_base, "48 8D ?? ?? ?? ?? ?? 48 8D 0C C1 48 8B 01 48 85 C0 74 18");
+			if (hashTableAOB == 0) {
+				spdlog::critical("Failed to get MtDTI hash table");
+			}
 		}
 
 		// Get displacement and calculate final value (displacement values count from next instr pointer, so add the opcode size (7)).
@@ -56,6 +70,112 @@ namespace DTIDumper {
 		class_records = GetClassRecords();
 	}
 
+
+	std::vector<ClassRecord> DTIDumper::GetClassRecords() {
+		auto dtiMap = GetFlattenedDtiMap();
+		auto dtis = GetSortedDtiVector();
+
+		/*
+		* Find all of the (potential) `GetDTI` vftable methods:
+		*    lea     rax, off_XXXXXXXX
+		*    retn
+		*/
+		auto potential_getdti_aob_matches = SigScan::ScanAll(this->image_base, "48 8D 05 ?? ?? ?? ?? C3");
+		spdlog::info("Getter AOB matches: 0x{0:x}", potential_getdti_aob_matches.size());
+
+		// Create a map of offsets used in the found getter functions, mapped to the getter function address.
+		std::map<uint64_t, uint64_t> lea_offset_to_getter_map;
+		for (size_t i = 0; i < potential_getdti_aob_matches.size(); i++)
+		{
+			uint32_t displ = *(uint32_t*)(potential_getdti_aob_matches[i] + 3);
+			lea_offset_to_getter_map[displ + potential_getdti_aob_matches[i] + 7] = potential_getdti_aob_matches[i];
+		}
+		spdlog::info("Generated gotten address <-> DTI getter map. Size: {0:X}", lea_offset_to_getter_map.size());
+
+
+		std::vector<Mt::MtDTI*> undetermined_dti;
+		std::map<Mt::MtDTI*, uint64_t> dti_to_vftable;
+
+		// Go over each DTI and see if we found a _single_ getter for it. 
+		for (size_t i = 0; i < dtis.size(); i++)
+		{
+			if (lea_offset_to_getter_map.find((uint64_t)dtis[i]) != lea_offset_to_getter_map.end())
+			{
+				uint64_t get_dti_vf_address = lea_offset_to_getter_map[(uint64_t)dtis[i]];
+				std::vector<uint64_t> found = SigScan::AlignedUint64ListScan(this->image_base, get_dti_vf_address, PAGE_READONLY);
+
+
+				if (found.size() != 1) {
+					//spdlog::info("Got {0} matches for vf {1}::GetDTI ptr: 0x{2:X}", found.size(), dtis[i]->class_name, lea_offset_to_getter_map[(uint64_t)dtis[i]]);
+					undetermined_dti.push_back(dtis[i]);
+				}
+				else {
+
+					// Offset backward in the vftable to get to the base.
+					// The ::GetDTI is the 4th virtual function.
+					dti_to_vftable[dtis[i]] = found[0] - (8 * 4);
+					//spdlog::info("Got single match for vf ptr->{0}::GetDTI 0x{1:X}", dtis[i]->class_name, found[0]);
+				}
+			}
+			else
+			{
+				spdlog::info("Missing {0}::GetDTI: 0x{1:X}", dtis[i]->class_name, lea_offset_to_getter_map[(uint64_t)dtis[i]]);
+				undetermined_dti.push_back(dtis[i]);
+			}
+
+			if (i % 100 == 0) {
+
+				spdlog::info("DTI->vftable mapping progress: {0}/{1}", i, dtis.size());
+			}
+		}
+		spdlog::info("Found total dti <-> vftable mapping(s): {0}", dti_to_vftable.size());
+		spdlog::info("Undetermined dti <-> vftable mapping(s): {0}", undetermined_dti.size());
+
+		if (undetermined_dti.size() > 0) {
+			spdlog::info("Attempting to resolve undetermined vftable through instanciation");
+			for (size_t i = 0; i < undetermined_dti.size(); i++)
+			{
+
+				spdlog::info("Trying to resolve: {0}", undetermined_dti[i]->class_name);
+				auto found = GetVftableByInstanciation(undetermined_dti[i]);
+				if (found != 0) {
+					dti_to_vftable[undetermined_dti[i]] = found;
+				}
+			}
+
+			spdlog::info("New total dti <-> vftable mapping(s): {0}", dti_to_vftable.size());
+		}
+
+		// Create the class records with populated properties
+		//class_records.push_back(ClassRecord{ dti, obj, obj_vftable, properties });
+
+		std::ofstream debug_file;
+		debug_file.open("dti_dumper_debug_log.txt", std::ios::out | std::ios::trunc);
+
+
+		std::vector<ClassRecord> class_records;
+		for (auto const& [dti, vftable_addr] : dti_to_vftable)
+		{
+			debug_file << fmt::format("Getting records for DTI: {0}. Vftable: {1:X} \n", dti->class_name, vftable_addr) << std::flush;
+
+			ClassRecord record;
+			record.dti = dti;
+			record.obj_instance = nullptr;
+			record.class_vftable = (void*)vftable_addr;
+
+			// Skip over excluded DTI classes.
+			if (this->excluded_classes.find(dti->class_name) == this->excluded_classes.end()) {
+				PopulateClassRecordProperties(&record, &dtiMap);
+			} else {
+				spdlog::warn("Skipping property population of excluded class: {0}", dti->class_name);
+			}
+
+			class_records.push_back(record);
+		}
+		return class_records;
+	}
+
+	/*
 	std::vector<ClassRecord> DTIDumper::GetClassRecords() {
 		// Get the DTI map.
 		auto dtiMap = GetFlattenedDtiMap();
@@ -133,7 +253,7 @@ namespace DTIDumper {
 
 				std::sort(properties.begin(), properties.end(), [&](const auto& lhs, const auto& rhs) {
 					return lhs->GetFieldOffsetFrom((uint64_t)obj) < rhs->GetFieldOffsetFrom((uint64_t)obj);
-				});
+					});
 
 
 
@@ -148,6 +268,75 @@ namespace DTIDumper {
 
 		return class_records;
 	}
+	*/
+
+	uint64_t GetVftableByInstanciation(Mt::MtDTI* dti) {
+		// Create an instance of the object we are dumping the properties of.
+		Mt::MtObject* mtObj = nullptr;
+		__try {
+			mtObj = reinterpret_cast<Mt::MtObject*>(dti->NewInstance());
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			spdlog::error("Got error instanciating {0}", dti->class_name);
+			return 0;
+		}
+
+		return *(uint64_t*)mtObj;
+	}
+
+	void PopulateClassRecordProperties(ClassRecord* cr, std::map<std::string, Mt::MtDTI*>* dtiMap) {
+		__try
+		{
+			// Create a MtPropertyList to populate with the MtObject::PopulatePropertyList function.
+			Mt::MtPropertyList* propListInst = nullptr;
+			__try {
+				auto mtPropListDTI = (*dtiMap)["MtPropertyList"];
+				propListInst = reinterpret_cast<Mt::MtPropertyList*>(mtPropListDTI->NewInstance());
+			}
+			__except (EXCEPTION_EXECUTE_HANDLER)
+			{
+				spdlog::error("Error instanciating MtPropertyList!");
+				return;
+			}
+
+			spdlog::info("Prop list: {0:X}", (uint64_t)propListInst);
+
+			// Populate our property list with the overridden virtual function on the MtObject.
+			__try
+			{
+				typedef bool(__thiscall* PopulatePropertyList_t)(Mt::MtObject*, Mt::MtPropertyList*);
+				auto address = (uint64_t)cr->class_vftable + (3 * 8);
+				PopulatePropertyList_t fp = (PopulatePropertyList_t)(*(uint64_t*)address);
+				spdlog::info("Calling {0}::GetDTI vf ptr: {1:X}", cr->dti->class_name, address);
+
+				fp(nullptr, propListInst);
+			}
+			__except (EXCEPTION_EXECUTE_HANDLER)
+			{
+				spdlog::error("Got error populating property list for {0}", cr->dti->class_name);
+				return;
+			}
+
+			if (propListInst->first_prop != nullptr) {
+				for (Mt::MtProperty* prop = propListInst->first_prop; prop != nullptr; prop = prop->next) {
+					cr->properties.push_back(prop);
+				}
+			}
+
+			std::sort(cr->properties.begin(), cr->properties.end(), [&](const auto& lhs, const auto& rhs) {
+				return lhs->GetFieldOffsetFrom((uint64_t)0) < rhs->GetFieldOffsetFrom((uint64_t)0);
+				});
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER)
+		{
+			spdlog::error("Got SEH exception while printing properties for {0}", cr->dti->class_name);
+		}
+	}
+
+	void DTIDumper::DumpRawInfo(std::string filename) {
+		
+	}
 
 	void DTIDumper::DumpToFile(std::string filename) {
 		//auto class_records = GetClassRecords();
@@ -158,10 +347,11 @@ namespace DTIDumper {
 		std::ofstream file;
 		file.open(filename, std::ios::out | std::ios::trunc);
 
-		file << fmt::format("// Ando's MHW ClassPropDump log [{}]\n", GetDateTime());
+		file << fmt::format("// Ando's MT DTI dump log [{}]\n", GetDateTime());
 		file << fmt::format("// Image Base: {:#X}\n\n", this->image_base);
 
 		// Output as text.
+
 		for (const auto& rec : class_records) {
 			// Generate the C++ styled inheritance chain for comment.
 			std::stringstream inheritance;
@@ -191,14 +381,15 @@ namespace DTIDumper {
 					file << fmt::format("// {0} vftable:0x{1:X}, Size:0x{2:X}, CRC32:0x{3:X}, CalcCRC:0x{4:X}\n", rec.dti->class_name, (uint64_t)rec.class_vftable, rec.dti->ClassSize(), rec.dti->crc_hash, classNameJAMCRC);
 				}
 
-				file << fmt::format("class {} /*{}*/ {{\n", rec.dti->class_name, inheritanceString);
+				file << fmt::format("class {} /*{}*/ {{\n", rec.dti->class_name, inheritanceString) << std::flush;
 
 				// Different formatting based on the property type.
 				for (const auto& prop : rec.properties) {
-
+#if defined(MT_GAME_MHW)
 					if (prop->prop_comment != nullptr) {
 						file << fmt::format("\t// Comment: {0}\n", prop->prop_comment);
 					}
+#endif
 
 					std::string typeAndName = fmt::format("{0} '{1}'", prop->GetTypeName(), prop->prop_name);
 					//int64_t cappedOffset = prop->GetFieldOffset();
@@ -211,20 +402,20 @@ namespace DTIDumper {
 						if (prop->IsGetterSetter()) {
 							// Dynamic array
 							std::string varString = fmt::format("{0}[*]", typeAndName, prop->data.var.count);
-							file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, DynamicArray, Getter:0x{2:X}, Setter:0x{3:X}, GetCount:0x{4:X}, Reallocate:0x{5:X} CRC32:0x{6:X}, Flags:0x{7:X}\n", varString, cappedOffset, prop->data.gs.fp_get, prop->data.gs.fp_set, prop->data.gs.fp_get_count, prop->data.gs.fp_dynamic_allocation, prop->GetCRC32(), prop->GetFullFlags());
+							file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, DynamicArray, Getter:0x{2:X}, Setter:0x{3:X}, GetCount:0x{4:X}, Reallocate:0x{5:X} CRC32:0x{6:X}, Flags:0x{7:X}\n", varString, cappedOffset, prop->data.gs.fp_get, prop->data.gs.fp_set, prop->data.gs.fp_get_count, prop->data.gs.fp_dynamic_allocation, prop->GetCRC32(), prop->GetFullFlags()) << std::flush;
 						}
 						else
 						{
 							// Static/fixed-length array
 							std::string varString = fmt::format("{0}[{1}]", typeAndName, prop->data.var.count);
-							file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, Array, CRC32:0x{2:X}, Flags:0x{3:X}\n", varString, cappedOffset, prop->GetCRC32(), prop->GetFullFlags());
+							file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, Array, CRC32:0x{2:X}, Flags:0x{3:X}\n", varString, cappedOffset, prop->GetCRC32(), prop->GetFullFlags()) << std::flush;
 						}
 					}
 					else if (prop->IsGetterSetter()) {
-						file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, PSEUDO-PROP, Getter:0x{2:X}, Setter:0x{3:X}, CRC32:0x{4:X}, Flags:0x{5:X}\n", typeAndName, cappedOffset, (uint64_t)prop->data.gs.fp_get, (uint64_t)prop->data.gs.fp_set, prop->GetCRC32(), prop->GetFullFlags());
+						file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, PSEUDO-PROP, Getter:0x{2:X}, Setter:0x{3:X}, CRC32:0x{4:X}, Flags:0x{5:X}\n", typeAndName, cappedOffset, (uint64_t)prop->data.gs.fp_get, (uint64_t)prop->data.gs.fp_set, prop->GetCRC32(), prop->GetFullFlags()) << std::flush;
 					}
 					else {
-						file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, Var, CRC32:0x{2:X}, Flags:0x{3:X}\n", typeAndName, cappedOffset, prop->GetCRC32(), prop->GetFullFlags());
+						file << fmt::format("\t{0:<50}; // Offset:0x{1:X}, Var, CRC32:0x{2:X}, Flags:0x{3:X}\n", typeAndName, cappedOffset, prop->GetCRC32(), prop->GetFullFlags()) << std::flush;
 					}
 				}
 

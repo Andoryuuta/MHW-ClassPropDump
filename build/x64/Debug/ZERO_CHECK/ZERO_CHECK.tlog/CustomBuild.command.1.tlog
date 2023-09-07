@@ -1,0 +1,10 @@
+^C:\DEV\MT-DTI-TOOLS\BUILD\CMAKEFILES\CB9D5722435052140A28B6BD55411DD0\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -SC:/dev/mt-dti-tools -BC:/dev/mt-dti-tools/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/dev/mt-dti-tools/build/MTDTIDump.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

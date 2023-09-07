@@ -1,0 +1,7 @@
+C:/dev/mt-dti-tools/build/CMakeFiles/MTDTIDump.dir
+C:/dev/mt-dti-tools/build/CMakeFiles/ALL_BUILD.dir
+C:/dev/mt-dti-tools/build/CMakeFiles/ZERO_CHECK.dir
+C:/dev/mt-dti-tools/build/extern/fmt/CMakeFiles/fmt.dir
+C:/dev/mt-dti-tools/build/extern/fmt/CMakeFiles/ALL_BUILD.dir
+C:/dev/mt-dti-tools/build/extern/spdlog/CMakeFiles/spdlog.dir
+C:/dev/mt-dti-tools/build/extern/spdlog/CMakeFiles/ALL_BUILD.dir

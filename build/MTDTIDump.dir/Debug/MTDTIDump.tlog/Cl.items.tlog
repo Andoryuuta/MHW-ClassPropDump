@@ -1,0 +1,8 @@
+C:\dev\mt-dti-tools\src\main.cpp;C:\dev\mt-dti-tools\build\MTDTIDump.dir\Debug\main.obj
+C:\dev\mt-dti-tools\src\sig_scan.cpp;C:\dev\mt-dti-tools\build\MTDTIDump.dir\Debug\sig_scan.obj
+C:\dev\mt-dti-tools\src\crc.c;C:\dev\mt-dti-tools\build\MTDTIDump.dir\Debug\crc.obj
+C:\dev\mt-dti-tools\src\win_utils.cpp;C:\dev\mt-dti-tools\build\MTDTIDump.dir\Debug\win_utils.obj
+C:\dev\mt-dti-tools\src\dumper.cpp;C:\dev\mt-dti-tools\build\MTDTIDump.dir\Debug\dumper.obj
+C:\dev\mt-dti-tools\src\mt\mt.cpp;C:\dev\mt-dti-tools\build\MTDTIDump.dir\Debug\mt.obj
+C:\dev\mt-dti-tools\src\mt\mt_dti.cpp;C:\dev\mt-dti-tools\build\MTDTIDump.dir\Debug\mt_dti.obj
+C:\dev\mt-dti-tools\src\mt\game\UMVC3.cpp;C:\dev\mt-dti-tools\build\MTDTIDump.dir\Debug\UMVC3.obj

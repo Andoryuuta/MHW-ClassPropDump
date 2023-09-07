@@ -1,52 +1,63 @@
 #include <Windows.h>
-#include <tlhelp32.h>
 #include <cstdint>
 #include <iostream>
 #include <map>
-#include <set>
 #include <memory>
+#include <set>
+#include <tlhelp32.h>
+
 #include "spdlog/spdlog.h"
-#include "SigScan.hpp"
-#include "Mt.hpp"
-#include "DTIDumper.hpp"
 
-// Open new console for c(in/out/err)
-void OpenConsole()
-{
-	AllocConsole();
-	FILE* cinStream;
-	FILE* coutStream;
-	FILE* cerrStream;
-	freopen_s(&cinStream, "CONIN$", "r", stdin);
-	freopen_s(&coutStream, "CONOUT$", "w", stdout);
-	freopen_s(&cerrStream, "CONOUT$", "w", stderr);
+// #include "DTIDumper.hpp"
+#include "dumper.h"
+#include "mt/mt.h"
+#include "sig_scan.h"
+#include "win_utils.h"
 
-
-	// From: https://stackoverflow.com/a/45622802 to deal with UTF8 CP:
-	SetConsoleOutputCP(CP_UTF8);
-	setvbuf(stdout, nullptr, _IOFBF, 1000);
-}
 DWORD WINAPI MyFunc(LPVOID lpvParam)
 {
-	OpenConsole();
-	spdlog::info("Ando's MHWClassPropDump Started!");
+    WinUtils::OpenConsole();
+    spdlog::info("Ando's MHWClassPropDump Started!");
 
-	auto dumper = std::make_unique<DTIDumper::DTIDumper>();
+    // Get the image base.
+    uintptr_t image_base = (uintptr_t)GetModuleHandle(NULL);
+    spdlog::info("Image Base: {0:x}", image_base);
 
-	dumper->ParseDTI();
-	//dumper->DumpRawInfo("dti_dump_raw.json");
+    // Create our dumper object.
+    std::shared_ptr<Dumper::Dumper> dumper = std::make_unique<Dumper::Dumper>(image_base);
 
-	dumper->DumpToFile("dti_prop_dump.h");
-	//dumper->DumpPythonArrayFile("dti_data.py");
-	dumper->DumpResourceInformation("cresource_info.txt");
+    // Suspend all threads except ours.
+    // This helps to prevent crashes caused by us calling to the game's code
+    // or by race conditions invalidating pointers our dumper would be using.
+    WinUtils::SuspendThreads();
 
-	return 0;
+    // Perform all game-specific intialization needed
+    // for MtDTI and MtProperty operations.
+    dumper->Initialize();
+    dumper->BuildClassRecords();
+    dumper->DumpDTIMap("dti_map.json");
+    dumper->DumpResourceInformation("cresource_info.txt");
+
+    dumper->ProcessProperties();
+    dumper->DumpDTIMap("dti_map_with_props.json");
+
+    // auto dumper = std::make_unique<DTIDumper::DTIDumper>();
+
+    // dumper->ParseDTI();
+    // // dumper->DumpRawInfo("dti_dump_raw.json");
+
+    // dumper->DumpToFile("dti_prop_dump.h");
+    // // dumper->DumpPythonArrayFile("dti_data.py");
+
+    return 0;
 }
 
-BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
-	if (fdwReason == DLL_PROCESS_ATTACH) {
-		CreateThread(NULL, 0, MyFunc, 0, 0, NULL);
-	}
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
+{
+    if (fdwReason == DLL_PROCESS_ATTACH)
+    {
+        CreateThread(NULL, 0, MyFunc, 0, 0, NULL);
+    }
 
-	return TRUE;
+    return TRUE;
 }

@@ -6,11 +6,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-SET(MT_GAME_MHW OFF CACHE BOOL "Compile for MHW")
-SET(MT_GAME_MHS2 OFF CACHE BOOL "Compile for MHS2")
-SET(MT_GAME_UMVC3 ON CACHE BOOL "Compile for UMVC3")
-SET(MT_GAME_DDDA OFF CACHE BOOL "Compile for DDDA")
-SET(MT_GAME_DDON OFF CACHE BOOL "Compile for DDON")
+SET(MT_GAME_MHW ON BOOL "Compile for MHW")
+SET(MT_GAME_MHS2 OFF BOOL "Compile for MHS2")
+SET(MT_GAME_UMVC3 OFF BOOL "Compile for UMVC3")
+SET(MT_GAME_DDDA OFF BOOL "Compile for DDDA")
+SET(MT_GAME_DDON OFF BOOL "Compile for DDON")
 
 configure_file(src/config.h.in config.h)
 
@@ -72,7 +72,7 @@ add_library(MTDTIDump SHARED
 	"src/dumper.cpp"
 	"src/mt/mt.cpp"
 	"src/mt/mt_dti.cpp"
-	"src/mt/game/UMVC3.cpp"
+	
 )
 
 # Include binary dir to include directory for the auto-generated config.h file.

@@ -34,12 +34,18 @@ DWORD WINAPI MyFunc(LPVOID lpvParam)
     // Perform all game-specific intialization needed
     // for MtDTI and MtProperty operations.
     dumper->Initialize();
+
+    // Dump the native MT types table.
+     
+    dumper->DumpMtTypes("mt_types.json");
+
     dumper->BuildClassRecords();
     dumper->DumpDTIMap("dti_map.json");
-    dumper->DumpResourceInformation("cresource_info.txt");
+    //dumper->DumpResourceInformation("cresource_info.txt");
 
     dumper->ProcessProperties();
     dumper->DumpDTIMap("dti_map_with_props.json");
+
 
     // auto dumper = std::make_unique<DTIDumper::DTIDumper>();
 

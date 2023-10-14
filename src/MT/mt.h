@@ -1,21 +1,25 @@
 #pragma once
 #include <cstdint>
 
+#include "config.h"
 #include "mt_dti.h"
 #include "mt_dti_hash_table.h"
 #include "mt_object.h"
-#include "mt_property_list.h"
-
-#include "config.h"
 
 namespace Mt
 {
-class MtPropertyList;
-
 class cResource : MtObject
 {
   public:
     virtual ~cResource() = 0;
+
+    /*
+    // MtObject:
+    virtual void* CreateUI() = 0;
+    virtual bool IsEnableInstance() = 0;
+    virtual void CreateProperty(MtPropertyList*) = 0;
+    virtual MtDTI* GetDTI() = 0;
+    */
 
     virtual void getUpdateTime() = 0;
     virtual const char* getExt() = 0;

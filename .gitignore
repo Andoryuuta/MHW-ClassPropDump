@@ -1,2 +1,5 @@
 out/*
+build/*
 .vs/*
+flat_dump.h
+flat_dump_mhw.h

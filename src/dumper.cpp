@@ -107,8 +107,34 @@ void Dumper::Initialize()
     m_sorted_dti_vec = this->GetSortedDTIVector();
 }
 
+void Dumper::DumpMtTypes(std::string_view filename)
+{   
+    spdlog::info("Writing mt type map to: {}", filename);
+
+    json table_array;
+    const char** table = GetMtTypeTable(this->m_image_base);
+    for (size_t i = 0; i < GetMtTypeTableCount(this->m_image_base); i++)
+	{
+        const char* type_name = table[i];
+		//spdlog::info("MtType idx:{}, name:{}", i, type_name);
+        json entry = json{
+            {"id", i},
+            {"name", type_name},
+            {"size", -1},
+        };
+        table_array.push_back(entry);
+	}
+
+    std::ofstream file;
+    file.open(filename, std::ios::out | std::ios::trunc);
+    file << table_array.dump();
+    file.flush();
+}
+
 void Dumper::BuildClassRecords()
 {
+    spdlog::info("Total DTI objects in client: {}", m_sorted_dti_vec.size());
+
     // Find all of the (potential) `GetDTI` vftable methods:
     /*
     *    lea     rax, off_XXXXXXXX
@@ -158,10 +184,23 @@ void Dumper::BuildClassRecords()
             std::vector<uintptr_t> vftable_matches = SigScan::ScanCurrentExecutableUintptrAligned(match_address, PAGE_READONLY);
             for (auto &&vftable_match : vftable_matches)
             {
-                // Since we have the ::GetMethod address in the vftable, 
+                /*
+                    vf0 = virtual ~MtObject() = 0;
+                    vf1 = virtual void* CreateUI() = 0;
+                    vf2 = virtual bool IsEnableInstance() = 0;
+                    vf3 = virtual void CreateProperty(MtPropertyList*) = 0;
+                    vf4 = virtual MtDTI* GetDTI() = 0;
+                */
+                // Since we have the ::GetDTI address in the vftable, 
                 // we need to walk back to the start of the vftable.
                 // We do this by stepping back 4 pointers (see MtObject definition).
-                dti_class_vftables[object].push_back(vftable_match - (sizeof(uintptr_t)*4));
+                uintptr_t vftable_base_address = vftable_match - (sizeof(uintptr_t)*4);
+
+                // Verify that that the ::CreateUI method is the shared function:
+
+
+                
+                dti_class_vftables[object].push_back(vftable_base_address);
             }
         }
 
@@ -363,12 +402,16 @@ DWORD WINAPI try_dti_create_property_threaded_entry(LPVOID lpvParam)
 
 bool try_dti_create_property_threaded(Mt::MtObject* object, Mt::MtPropertyList* property_list)
 {
-    struct try_dti_create_property_threaded_entry_struct data = {
-        .object = object,
-        .property_list = property_list,
-        .finished_ok = false,
-    };
-    auto handle = CreateThread(NULL, 0, try_dti_create_property_threaded_entry, (LPVOID)&data, 0, NULL);
+    // Create a large buffer on the heap to use for our thread-passing data.
+    // This is required as the function we call may corrupt data around this pointer
+    // if we don't have a proper vftable.
+    std::vector<uint8_t> buf(1024*128, 0);
+    auto data = reinterpret_cast<try_dti_create_property_threaded_entry_struct*>(buf.data());
+    data->object = object;
+    data->property_list = property_list;
+    data->finished_ok = false;
+
+    auto handle = CreateThread(NULL, 0, try_dti_create_property_threaded_entry, (LPVOID)data, 0, NULL);
     auto wait_result = WaitForSingleObject(handle, 1000);
     if (wait_result == WAIT_TIMEOUT)
     {
@@ -377,13 +420,13 @@ bool try_dti_create_property_threaded(Mt::MtObject* object, Mt::MtPropertyList* 
         return false;
     }
 
-    if (data.finished_ok)
+    if (!data->finished_ok)
     {
         spdlog::info("try_dti_create_property failed.");
         return false;
     }
 
-    return data.result;
+    return data->result;
 }
 
 
@@ -417,14 +460,18 @@ DWORD WINAPI try_dti_create_new_instance_threaded_entry(LPVOID lpvParam)
     return 0;
 }
 
-Mt::MtObject* try_dti_create_new_instance_threaded_entry_struct(Mt::MtDTI* dti)
+Mt::MtObject* try_dti_create_new_instance_threaded(Mt::MtDTI* dti)
 {
-    struct try_dti_create_new_instance_threaded_entry_struct data = {
-        .dti = dti,
-        .result = nullptr,
-        .finished_ok = false,
-    };
-    auto handle = CreateThread(NULL, 0, try_dti_create_new_instance_threaded_entry, (LPVOID)&data, 0, NULL);
+    // Create a large buffer on the heap to use for our thread-passing data.
+    // This is required as the function we call may corrupt data around this pointer
+    // if we don't have a proper vftable.
+    std::vector<uint8_t> buf(1024*128, 0);
+    auto data = reinterpret_cast<try_dti_create_new_instance_threaded_entry_struct*>(buf.data());
+    data->dti = dti;
+    data->result = nullptr;
+    data->finished_ok = false;
+
+    auto handle = CreateThread(NULL, 0, try_dti_create_new_instance_threaded_entry, (LPVOID)data, 0, NULL);
     auto wait_result = WaitForSingleObject(handle, 1000);
     if (wait_result == WAIT_TIMEOUT)
     {
@@ -433,13 +480,13 @@ Mt::MtObject* try_dti_create_new_instance_threaded_entry_struct(Mt::MtDTI* dti)
         return nullptr;
     }
 
-    if (data.finished_ok)
+    if (!data->finished_ok)
     {
         spdlog::info("try_dti_create_new_instance failed.");
         return nullptr;
     }
 
-    return data.result;
+    return data->result;
 }
 
 
@@ -506,7 +553,16 @@ void Dumper::ProcessProperties()
             file.flush();
 
             // Populate the properties into into.
-            bool ok = try_dti_create_property_threaded(fake_object, property_list);
+            try_dti_create_property_threaded(fake_object, property_list);
+
+            //bool ok = try_dti_create_property_threaded(fake_object, property_list);
+            //if (!ok)
+            //{
+            //    spdlog::info("Hard exception while processing fake object!");
+            //    continue;
+            //}
+
+            //bool ok = try_dti_create_property_threaded(fake_object, property_list);
             //if (!ok)
             //{
             //    spdlog::info("Hard exception while processing fake object, making real object!");
@@ -586,6 +642,12 @@ void Dumper::ProcessProperties()
     }
     
     spdlog::info("Done processing properties!");
+}
+
+
+void Dumper::TrySerializeResource()
+{
+
 }
 
 } // namespace Dumper

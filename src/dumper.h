@@ -63,6 +63,8 @@ class Dumper
 
     void Initialize();
 
+    void DumpMtTypes(std::string_view filename);
+
     // Build class records from the DTI.
     void BuildClassRecords();
     // void LoadClassRecords(std::string_view filename);

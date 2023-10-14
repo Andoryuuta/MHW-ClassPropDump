@@ -495,7 +495,6 @@ void Dumper::ProcessProperties()
                 fake_object->vftable = class_record.class_vftables[vftable_idx];
             }
             auto fake_object = reinterpret_cast<Mt::MtObject*>(fake_object_memory.data());
-            // spdlog::info("Created fake object: 0x{:X}", reinterpret_cast<uintptr_t>(fake_object));
             file << std::format("Created fake object: 0x{:X}\n", reinterpret_cast<uintptr_t>(fake_object));
         
             // Create a MtPropertyList
@@ -506,7 +505,6 @@ void Dumper::ProcessProperties()
             }
 
             Mt::MtPropertyList* property_list = reinterpret_cast<Mt::MtPropertyList*>(mt_property_list_dti->NewInstance());
-            // spdlog::info("Created MtPropertyList: 0x{:X}", reinterpret_cast<uintptr_t>(property_list));
             file << std::format("Created MtPropertyList: 0x{:X}\n", reinterpret_cast<uintptr_t>(property_list));
             file.flush();
 
@@ -569,7 +567,8 @@ void Dumper::ProcessProperties()
                     //spdlog::info("Property: {}", mt_prop->name());
 
                     // We have to treat the name as bytes because the json encoder
-                    // only accepts utf8 characters.
+                    // only accepts utf8 characters, which doesn't always match the
+                    // encoding used in some MTF games.
                     auto ssize = strnlen_s(mt_prop->name(), 1024);
                     std::vector<uint8_t> name_bytes(ssize, 0);
                     memcpy_s(name_bytes.data(), name_bytes.size(), mt_prop->name(), ssize);

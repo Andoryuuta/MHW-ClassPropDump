@@ -4,10 +4,26 @@ import sys
 
 class DumpProcessor():
     def __init__(self):
+        self._game_profile = None
+        self._game_profile_type_names = {}
         self._dump = None
         self._cr_by_id = None
         self._cr_by_name = None
     
+    def load_profile(self, filename):
+        with open(filename, 'rt') as f:
+            data = json.load(f)
+            if 'game_name' not in data:
+                raise "Incomplete game profile!"
+
+            print(f"Game profile: {data['game_name']}")
+            self._game_profile = data
+
+            # Create a fast lookup table of property type ID -> property type name
+            self._game_profile_type_names = {}
+            for prop_type in self._game_profile['property_types']:
+                self._game_profile_type_names[prop_type['id']] = prop_type['name']
+
     def load(self, filename):
         with open(filename, 'rt') as f:
             data = json.load(f)
@@ -22,18 +38,14 @@ class DumpProcessor():
                         if 'properties' not in vft or vft['properties'] is None:
                             vft['properties'] = []
 
-            # Fixup/decode property names which are written as pure byte arrays of Shift-JIS text.
+            # Fixup/decode property names which are written as pure byte arrays.
+            # This is required due to different encodings across games (shift-jis, utf8, etc),
+            # which we don't want to attempt to transcode in the C++ codebase.
             for cr in self._dump:
                 for vft in cr['properties']:
                     for p in vft['properties']:
-                        p['name'] = bytearray(p['name_bytes']).decode('utf8')
+                        p['name'] = bytearray(p['name_bytes']).decode(self._game_profile['native_encoding'])
                         del p['name_bytes']
-                        # try:
-                        #     p['name'] = bytearray(p['name_bytes']).decode('utf8')
-                        #     del p['name_bytes']
-                        # except:
-                        #     p['name'] = bytearray(p['name_bytes']).decode('shift-jis')
-                        #     del p['name_bytes']
 
             # for cr in self._dump:
             #     pprint(cr)
@@ -73,11 +85,17 @@ class DumpProcessor():
         output += '{\n'
         output += '\t/* TODO */\n'
         for prop in vft['properties']:
-            prop['calc_offset'] = prop['get'] - prop['owner'] 
+            prop['calc_offset'] = prop['get'] - prop['owner']
+
         
         vft['properties'].sort(key=lambda x: x['calc_offset'])
         for prop in vft['properties']:
-            output += f"\tname: {prop['name']}, type:{prop['type']}, attr:{prop['attr']}, offset:0x{prop['calc_offset']:X}\n"
+            # Lookup property type name (if available)
+            prop_type = f"{prop['type']}"
+            if prop['type'] in self._game_profile_type_names:
+                prop_type = self._game_profile_type_names[prop['type']]
+
+            output += f"\tname: {prop['name']}, type:{prop_type}, attr:{prop['attr']}, offset:0x{prop['calc_offset']:X}\n"
             
         output += '}\n'
 
@@ -103,56 +121,32 @@ class DumpProcessor():
         output += '\n'
         return output
 
-    def generate_flat_dump(self):
+    def write_flat_dump(self, filepath):
         # # Temp - dump single CR
         # cr = self._cr_by_name['rCnsMatrix']
         # return self.generate_class_record_dump_flat(cr)
 
-        output = ''
-        for cr in self._dump:
-            output += self.generate_class_record_dump_flat(cr)
-        
-        return output
-
-
+        with open(filepath, 'wt', encoding='utf8') as f:
+            for i, cr in enumerate(self._dump):
+                if i % 100 == 0:
+                    print(f"Generating class records [{i}/{len(self._dump)}]")
+                f.write(self.generate_class_record_dump_flat(cr))
 
 
 def main():
+    if len(sys.argv) != 3:
+        print(f"Usage: {sys.argv[0]} <path to dti_map_with_props.json> <path to game profile .json>")
+        sys.exit(1)
+
+    dump_path = sys.argv[1]
+    profile_path = sys.argv[2]
+
     dp = DumpProcessor()
-    #dp.load(r'C:\Program Files (x86)\Steam\steamapps\common\ULTIMATE MARVEL VS. CAPCOM 3\dti_map_with_props.json')
-    dp.load(r'C:\Program Files (x86)\Steam\steamapps\common\Monster Hunter World\dti_map_with_props.json')
-    flat_dump = dp.generate_flat_dump()
+    dp.load_profile(profile_path)
+    dp.load(dump_path)
 
-    with open('./flat_dump.h', 'wt', encoding='utf8') as f:
-        f.write(flat_dump)
-    
-    print("created flat dump")
-
-    # with open(r'C:\Program Files (x86)\Steam\steamapps\common\ULTIMATE MARVEL VS. CAPCOM 3\dti_map_with_props.json', 'rt') as f:
-    #     data = json.load(f)
-
-    #     fix_property_names(data)
-
-    #     for cr in data:
-    #         # pprint(cr)
-    #         # if 'properties' in cr and cr['properties'] is not None:
-    #         #     for vft in cr['properties']:
-    #         #         if 'properties' in vft and vft['properties'] is not None:
-    #         #             for p in vft['properties']:
-    #         #                 print(p)
-
-    #         if not cr['is_abstract'] and len(cr['properties']) > 1:
-    #             print(cr['name'])
-
-
-    #         # parent_name = None
-    #         # if cr['']
-    #         # if cr['properties'] is None:
-
-                
-
-    #         # for vft in cr['properties']:
-    #         # name = cr['name']
+    dp.write_flat_dump('./flat_dump.h')
+    print("Wrote ./flat_dump.h")
 
 
 if __name__ == '__main__':

@@ -35,8 +35,8 @@ class MtProperty
   private:
     char* mName;
     char* mComment;
-    uint32_t mType : 16;
-    uint32_t mAttr : 16;
+    uint32_t mType : 12;
+    uint32_t mAttr : 20;
     [[maybe_unused]] uint32_t field_14; // What is this?
     MtObject* mpOwner;
 

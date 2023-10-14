@@ -36,11 +36,12 @@ DWORD WINAPI MyFunc(LPVOID lpvParam)
     dumper->Initialize();
 
     // Dump the native MT types table.
-     
     dumper->DumpMtTypes("mt_types.json");
 
+    // 
     dumper->BuildClassRecords();
-    dumper->DumpDTIMap("dti_map.json");
+
+    dumper->DumpDTIMap("dti_map_propless.json");
     //dumper->DumpResourceInformation("cresource_info.txt");
 
     dumper->ProcessProperties();

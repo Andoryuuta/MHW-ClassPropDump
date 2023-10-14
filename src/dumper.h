@@ -74,11 +74,6 @@ class Dumper
 
     void ProcessProperties();
 
-    // void ParseDTI();
-    // void DumpRawInfo(std::string filename);
-    // void DumpToFile(std::string filename);
-    // void DumpPythonArrayFile(std::string filename);
-    // void DumpResourceInformation(std::string filename);
   private:
     std::vector<Mt::MtDTI*> GetSortedDTIVector();
     Mt::MtDTI* GetDTIByName(std::string_view name);

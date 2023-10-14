@@ -195,10 +195,6 @@ void Dumper::BuildClassRecords()
                 // we need to walk back to the start of the vftable.
                 // We do this by stepping back 4 pointers (see MtObject definition).
                 uintptr_t vftable_base_address = vftable_match - (sizeof(uintptr_t)*4);
-
-                // Verify that that the ::CreateUI method is the shared function:
-
-
                 
                 dti_class_vftables[object].push_back(vftable_base_address);
             }
@@ -356,22 +352,6 @@ struct MSVCVirtualClassInstance
     uintptr_t vftable;
 };
 
-
-// TODO(Andoryuuta): Hand this possibly-failing task onto a seperate thread that we can suspend/terminate if it goes crazy.
-//bool try_dti_create_property(Mt::MtObject* object, Mt::MtPropertyList* property_list)
-//{
-//    __try
-//    {
-//        object->CreateProperty(property_list);
-//        return true;
-//    }
-//    __except (EXCEPTION_EXECUTE_HANDLER)
-//    {
-//        return false;
-//    }
-//}
-
-
 bool try_dti_create_property(Mt::MtObject* object, Mt::MtPropertyList* property_list)
 {
     __try
@@ -429,10 +409,6 @@ bool try_dti_create_property_threaded(Mt::MtObject* object, Mt::MtPropertyList* 
     return data->result;
 }
 
-
-
-
-
 Mt::MtObject* try_dti_create_new_instance(Mt::MtDTI* dti)
 {
     __try
@@ -488,24 +464,6 @@ Mt::MtObject* try_dti_create_new_instance_threaded(Mt::MtDTI* dti)
 
     return data->result;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 // Process all of the DTI properties of the current class records.
@@ -642,12 +600,6 @@ void Dumper::ProcessProperties()
     }
     
     spdlog::info("Done processing properties!");
-}
-
-
-void Dumper::TrySerializeResource()
-{
-
 }
 
 } // namespace Dumper

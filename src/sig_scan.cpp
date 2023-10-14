@@ -160,36 +160,3 @@ std::vector<uintptr_t> SigScan::ScanAllRaw(uintptr_t start_address, uintptr_t en
 
     return matches;
 }
-
-// std::vector<uint64_t> SigScan::AlignedUint64ListScan(uint64_t module_base, uint64_t value, DWORD scan_protection)
-// {
-//     // Get the region information.
-//     MEMORY_BASIC_INFORMATION mbi;
-//     LPCVOID lpMem = (LPCVOID)module_base;
-
-//     std::vector<uint64_t> matches;
-
-//     // Go over each region and scan.
-//     while (VirtualQuery(lpMem, &mbi, sizeof(MEMORY_BASIC_INFORMATION)))
-//     {
-//         uint64_t* region_end = (uint64_t*)((uint64_t)mbi.BaseAddress + (uint64_t)mbi.RegionSize);
-
-//         if ((uint64_t)mbi.AllocationBase == module_base)
-//         {
-//             if (mbi.Protect & scan_protection)
-//             {
-//                 for (uint64_t* p = (uint64_t*)mbi.BaseAddress; p < region_end - 1; p++)
-//                 {
-//                     if (*p == value)
-//                     {
-//                         matches.push_back((uint64_t)p);
-//                     }
-//                 }
-//             }
-//         }
-
-//         lpMem = (LPVOID)region_end;
-//     }
-
-//     return matches;
-// }

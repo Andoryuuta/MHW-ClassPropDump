@@ -9,9 +9,16 @@
     #error The MHW dumper must be compiled for 64-bit!
 #endif
 
-#define MT_DTI_HASH_TABLE_OFFSET 0x50930e0
-#define MT_TYPE_TABLE_RVA_OFFSET 0x403ed50
+// MHW 15.11.01
+// #define MT_DTI_HASH_TABLE_OFFSET 0x50930e0
+// #define MT_TYPE_TABLE_RVA_OFFSET 0x403ed50
+// #define MT_TYPE_TABLE_COUNT 77
+
+// MHW 15.20.00
+#define MT_DTI_HASH_TABLE_OFFSET 0x5030970
+#define MT_TYPE_TABLE_RVA_OFFSET 0x3fdcd90
 #define MT_TYPE_TABLE_COUNT 77
+
 
 // Game-specific MT class definitions
 namespace Mt

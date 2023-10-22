@@ -50,7 +50,7 @@ std::vector<uintptr_t> SigScan::ScanCurrentExecutable(const std::string& sig, ui
     uintptr_t mod_start = (uintptr_t)module_info.lpBaseOfDll;
     uintptr_t mod_end = mod_start + (uintptr_t)module_info.SizeOfImage;
 
-    return Scan(mod_start, mod_end, sig, PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE, alignment);
+    return Scan(mod_start, mod_end, sig, PAGE_EXECUTE|PAGE_EXECUTE_READ|PAGE_EXECUTE_READWRITE|PAGE_EXECUTE_WRITECOPY, alignment);
 }
 
 std::vector<uintptr_t> SigScan::ScanCurrentExecutableUintptrAligned(uintptr_t value, DWORD scan_protection)
@@ -131,25 +131,24 @@ std::vector<uintptr_t> SigScan::ScanAllRaw(uintptr_t start_address, uintptr_t en
 
         // spdlog::info("Scanning region - start:{:X}, end:{:X}", (uintptr_t)mbi.BaseAddress,
         //              (uintptr_t)mbi.BaseAddress + (uintptr_t)mbi.RegionSize);
-        if (mbi.Protect & scan_protection)
+        if ((mbi.AllocationProtect & scan_protection) != 0 || (mbi.Protect & scan_protection) != 0)
         {
+
             for (uint8_t* p = (uint8_t*)mbi.BaseAddress; p < region_end - sig_bytes.size(); p += alignment)
             {
                 for (size_t i = 0; i < sig_bytes.size(); i++)
                 {
-                    if (sig_skip_mask_data[i] == 0)
+                    // If this is not in the skip mask and the byte doesn't match, break immediately.
+                    if (sig_skip_mask_data[i] == 0 && p[i] != sig_bytes_data[i])
                     {
-                        if (p[i] != sig_bytes_data[i])
-                        {
-                            // If we are not skipping this byte and it doesn't match, break immediately.
-                            break;
-                        }
-                        else if (i == sig_bytes.size() - 1)
-                        {
-                            // If we reached the last byte of the sig without breaking the loop,
-                            // then we have have fully matched the signature bytes.
-                            matches.push_back((uintptr_t)p);
-                        }
+                        break;
+                    }
+
+                    // If we reached the last byte of the sig without breaking the loop,
+                    // then we have have fully matched the signature bytes.
+                    if (i == sig_bytes.size() - 1)
+                    {
+                        matches.push_back((uintptr_t)p);
                     }
                 }
             }

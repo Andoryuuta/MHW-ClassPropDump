@@ -2,6 +2,7 @@
 #include <fstream>
 #include <iostream>
 #include <set>
+#include <unordered_set>
 #include <windows.h>
 
 #include "dumper.h"
@@ -131,22 +132,55 @@ void Dumper::DumpMtTypes(std::string_view filename)
     file.flush();
 }
 
+uintptr_t parse_lea_x64_constant(uintptr_t lea_address)
+{
+    uint32_t displ = *(uint32_t*)(lea_address + 3);
+    uint32_t x64_lea_rax_opcode_size = 7;
+    return displ + lea_address + x64_lea_rax_opcode_size;
+}
+
+// TODO(Andorytuuta): Make 32-bit variant of this function.
 void Dumper::BuildClassRecords()
 {
     spdlog::info("Total DTI objects in client: {}", m_sorted_dti_vec.size());
+
+    // Build set to filter to valid vftables.
+    // We check if each possible vftable match is valid by verifying that it's referenced at least once
+    // somewhere in the binary (e.g. constructor or deconstructor). Specifically used in a relative
+    // `lea <REG>, XXXXXXXX` instruction.
+    //
+    // .text:00000001422039BA 48 8D 05 0F D1 2F 01                    lea     rax, off_143500AD0
+    // .text:0000000142203A4E 48 8D 05 7B D0 2F 01                    lea     rax, off_143500AD0
+    // .text:00000001424BA445 4C 8D 35 4C 57 07 01                    lea     r14, unk_14352FB98
+    // .text:00000001424BA846 4C 8D 05 4B 53 07 01                    lea     r8, unk_14352FB98
+    // .text:00000001424BA4C9 4C 8D 1D B8 9C 07 01                    lea     r11, unk_143534188
+    // .text:000000014023D4DB 48 8D 2D 06 FC C0 02                    lea     rbp, unk_142E4D0E8
+    // .text:000000014024EEC2 4C 8D 3D 07 E7 CB 02                    lea     r15, unk_142F0D5D0
+
+    std::unordered_set<uintptr_t> lea_used_constants;
+    std::vector<uintptr_t> lea_xrefs_0 = SigScan::ScanCurrentExecutable("48 8D ?? ?? ?? ?? ??", /*alignment=*/1);
+    for (size_t i = 0; i < lea_xrefs_0.size(); i++)
+    {
+        lea_used_constants.insert(parse_lea_x64_constant(lea_xrefs_0[i]));
+    }
+    std::vector<uintptr_t> lea_xrefs_1 = SigScan::ScanCurrentExecutable("4C 8D ?? ?? ?? ?? ??", /*alignment=*/1);
+    for (size_t i = 0; i < lea_xrefs_1.size(); i++)
+    {
+        lea_used_constants.insert(parse_lea_x64_constant(lea_xrefs_1[i]));
+    }
+    spdlog::info("LEA filter size: 0x{0:x}", lea_used_constants.size());
+
 
     // Find all of the (potential) `GetDTI` vftable methods:
     /*
     *    lea     rax, off_XXXXXXXX
     *    retn
     */
-    // TODO(Andorytuuta): Make 32-bit variant of this logic.
     std::vector<uintptr_t> potential_getdti_matches = SigScan::ScanCurrentExecutable("48 8D 05 ?? ?? ?? ?? C3", /*alignment=*/8);
     spdlog::info("Potential ::GetDTI AOB matches: 0x{0:x}", potential_getdti_matches.size());
 
-
     // Build a set in order to have a fast check if an address is a DTI object instance.
-    std::set<Mt::MtDTI*> dti_set;
+    std::unordered_set<Mt::MtDTI*> dti_set;
     for (auto &&dti : m_sorted_dti_vec)
     {
         dti_set.insert(dti);
@@ -169,18 +203,13 @@ void Dumper::BuildClassRecords()
             spdlog::info("Processing ::GetDTI matches [{}/{}]", i, potential_getdti_matches.size());
         }
         uintptr_t match_address = potential_getdti_matches[i];
-        uint32_t displ = *(uint32_t*)(match_address + 3);
-        uint32_t x64_lea_rax_opcode_size = 7;
-        uintptr_t constant_address = displ + match_address + x64_lea_rax_opcode_size;
+        uintptr_t constant_address = parse_lea_x64_constant(match_address);
 
         Mt::MtDTI* object = reinterpret_cast<Mt::MtDTI*>(constant_address);
         if(dti_set.contains(object))
         {
             // We know the getter is for a valid DTI object.
             // Find the vftable(s) that this getter is listed in.
-
-            // spdlog::info("Searching vftable for getter:{:X}, DTI:{}", match_address, m_sorted_dti_vec[i]->name());
-
             std::vector<uintptr_t> vftable_matches = SigScan::ScanCurrentExecutableUintptrAligned(match_address, PAGE_READONLY);
             for (auto &&vftable_match : vftable_matches)
             {
@@ -195,34 +224,27 @@ void Dumper::BuildClassRecords()
                 // we need to walk back to the start of the vftable.
                 // We do this by stepping back 4 pointers (see MtObject definition).
                 uintptr_t vftable_base_address = vftable_match - (sizeof(uintptr_t)*4);
-                
-                dti_class_vftables[object].push_back(vftable_base_address);
+
+                // Filter to vftables that are referenced by a LEA instruction.
+                bool is_vftable_referenced = lea_used_constants.contains(vftable_base_address);
+
+                if (vftable_matches.size() == 1)
+                {
+                    // We should _never_ have a single vftable match that doesn't pass the LEA filter
+                    if (!is_vftable_referenced)
+                    {
+                        spdlog::error("Single vftable failed to pass LEA filter: 0x{0:x}", vftable_base_address);
+                        assert(is_vftable_referenced == true);
+                    }
+
+                    dti_class_vftables[object].push_back(vftable_base_address);
+                }
+                else if (vftable_matches.size() > 1 && is_vftable_referenced)
+                {
+                    dti_class_vftables[object].push_back(vftable_base_address);
+                }
             }
         }
-
-
-        // // Validate that the constant is a known DTI object.
-        // // TODO(Andoryuuta): O(N*M) complexity - build a temporary map/set for faster DTI lookup.
-        // for (size_t j = 0; j < m_sorted_dti_vec.size(); j++)
-        // {
-        //     if (constant_address == reinterpret_cast<uintptr_t>(m_sorted_dti_vec[j]))
-        //     {
-        //         // We know the getter is for a valid DTI object.
-        //         // Find the vftable(s) that this getter is listed in.
-
-        //         // spdlog::info("Searching vftable for getter:{:X}, DTI:{}", match_address, m_sorted_dti_vec[i]->name());
-
-        //         std::vector<uintptr_t> vftable_matches = SigScan::ScanCurrentExecutableUintptrAligned(match_address);
-        //         for (auto &&vftable_match : vftable_matches)
-        //         {
-        //             // Since we have the ::GetMethod address in the vftable, 
-        //             // we need to walk back to the start of the vftable.
-        //             // We do this by stepping back 4 pointers (see MtObject definition).
-        //             dti_class_vftables[m_sorted_dti_vec[j]].push_back(vftable_match - (sizeof(uintptr_t)*4));
-        //         }
-        //         break;
-        //     }
-        // }
     }
 
     // Build the class records from the DTI map.
@@ -476,8 +498,11 @@ void Dumper::ProcessProperties()
     {
         ProcessedClassRecord class_record = m_class_records[i];
         Mt::MtDTI* dti = reinterpret_cast<Mt::MtDTI*>(class_record.dti);
-        spdlog::info("Processing properties for {}, vftable count: {}", dti->name(), class_record.class_vftables.size());
-        file << std::format("Processing properties for {}, vftable count: {}\n", dti->name(), class_record.class_vftables.size());
+        if (class_record.class_vftables.size() == 0)
+        {
+            spdlog::info("Processing properties for {}, vftable count: {}", dti->name(), class_record.class_vftables.size());
+            file << std::format("Processing properties for {}, vftable count: {}\n", dti->name(), class_record.class_vftables.size());
+        }
 
         for (size_t vftable_idx = 0; vftable_idx < class_record.class_vftables.size(); vftable_idx++)
         {
@@ -556,7 +581,8 @@ void Dumper::ProcessProperties()
             //    //}
             //}
 
-            spdlog::info("Got valid property list(0x{:X}), saving to record.", (uintptr_t)property_list);
+            //spdlog::info("Got valid property list(0x{:X}), saving to record.", (uintptr_t)property_list);
+
             // Create our property list
             std::vector<ProcessedProperty> props;
             if (property_list->mpElement != nullptr)

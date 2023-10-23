@@ -17,6 +17,7 @@
 // MHW 15.20.00
 #define MT_DTI_HASH_TABLE_OFFSET 0x5030970
 #define MT_TYPE_TABLE_RVA_OFFSET 0x3fdcd90
+#define MT_TYPE_GET_BYTES_RVA_OFFSET 0x218be10
 #define MT_TYPE_TABLE_COUNT 77
 
 
@@ -38,6 +39,8 @@ class MtProperty
     inline uintptr_t set_count() { return this->ufSetCount; }
     inline uint32_t index() { return this->mIndex; }
     inline MtProperty* next() { return this->mpNext; }
+
+    inline void type(uint32_t type) { mType = type; }
 
   private:
     char* mName;
@@ -94,3 +97,14 @@ inline const char** GetMtTypeTable(uintptr_t image_base)
     return reinterpret_cast<const char**>(image_base + MT_TYPE_TABLE_RVA_OFFSET);
 }
 inline size_t GetMtTypeTableCount(uintptr_t image_base) { return MT_TYPE_TABLE_COUNT; }
+
+inline size_t GetMtTypeSize(uintptr_t image_base, uint32_t type_id)
+{
+    typedef int64_t(__thiscall * MtProperty_GetBytes_t)(Mt::MtProperty* this_ptr);
+    MtProperty_GetBytes_t fpGetBytes = (MtProperty_GetBytes_t)(image_base+MT_TYPE_GET_BYTES_RVA_OFFSET);
+    
+    Mt::MtProperty prop{};
+    prop.type(type_id);
+
+    return fpGetBytes(&prop);
+}

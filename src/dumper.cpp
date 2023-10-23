@@ -117,11 +117,12 @@ void Dumper::DumpMtTypes(std::string_view filename)
     for (size_t i = 0; i < GetMtTypeTableCount(this->m_image_base); i++)
 	{
         const char* type_name = table[i];
+        size_t size = GetMtTypeSize(this->m_image_base, i);
 		//spdlog::info("MtType idx:{}, name:{}", i, type_name);
         json entry = json{
             {"id", i},
             {"name", type_name},
-            {"size", -1},
+            {"size", size},
         };
         table_array.push_back(entry);
 	}

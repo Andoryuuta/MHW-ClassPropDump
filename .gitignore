@@ -4,3 +4,4 @@ build/*
 .vscode/*
 flat_dump.h
 flat_dump_mhw.h
+__pycache__/

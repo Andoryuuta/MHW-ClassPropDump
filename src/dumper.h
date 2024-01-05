@@ -4,6 +4,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <optional>
 
 namespace Mt
 {
@@ -18,6 +19,7 @@ struct ProcessedProperty
   public:
     //std::string name;
     std::vector<uint8_t> name_bytes;
+    std::optional<std::vector<uint8_t>> comment_bytes;
     uint32_t type;
     uint32_t attr;
     uintptr_t owner;
@@ -32,6 +34,7 @@ struct ProcessedVftable
 {
   public:
     uintptr_t vftable_va;
+    bool properties_processed = false;
     std::vector<ProcessedProperty> properties;
 };
 
@@ -50,9 +53,8 @@ struct ProcessedClassRecord
     uint32_t allocator_index;
     bool is_abstract;
     bool is_hidden;
-    bool properties_processed = false;
     std::vector<uintptr_t> class_vftables;
-    std::vector<ProcessedVftable> properties;
+    std::vector<ProcessedVftable> processed_vftables;
 };
 
 class Dumper

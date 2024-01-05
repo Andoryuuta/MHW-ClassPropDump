@@ -44,6 +44,7 @@ class MtDTI
     uint32_t size();
     uint32_t allocator_index();
     uint32_t id();
+    char* comment();
 
     bool is_abstract();
     bool is_hidden();

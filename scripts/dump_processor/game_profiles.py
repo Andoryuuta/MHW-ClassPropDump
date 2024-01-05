@@ -1,14 +1,14 @@
 mt_game_profiles = {
     'mhw': {
         'game_name': 'Monster Hunter World',
-        'version': '15.20.00',
+        'version': '15.21.00',
         'native_encoding': 'utf8',
         'property_flags': {
             0x0001: 'FLAG_0001',
             0x0002: 'FLAG_0002',
             0x0004: 'FLAG_0004_CLASS_INST_RELATED',
-            0x0008: 'FLAG_0008_DYNAMIC_PROPERTY_OR_EVENT',
-            0x0010: 'FLAG_0010_CLASSREF',
+            0x0008: 'FLAG_0008_DYNAMIC_PROPERTY',
+            0x0010: 'FLAG_0010',
             0x0020: 'FLAG_0020_ARRAY',
             0x0040: 'FLAG_0040',
             0x0080: 'FLAG_0080_GETTER_SETTER',
@@ -18,8 +18,8 @@ mt_game_profiles = {
             0x0800: 'FLAG_0800',
             0x1000: 'FLAG_1000',
             0x2000: 'FLAG_2000',
-            0x4000: 'FLAG_4000',
-            0x8000: 'FLAG_8000',
+            0x4000: 'FLAG_4000_UNUSED', # Unused in MHW
+            0x8000: 'FLAG_8000_UNUSED', # Unused in MHW
         },
         'property_types': [
             {'id':0,'name':'undefined','size':0},
@@ -100,5 +100,25 @@ mt_game_profiles = {
             {'id':75,'name':'bool','size':1},
             {'id':76,'name':'END','size':0}
         ],
+        'real_vftables': {
+            'CoprocessorObject': 0x143586060,
+            'MtArray': 0x142F0CFF8,
+            'MtNetObject': 0x1434FF980,
+            'MtObject': 0x142E4D640,
+            'MtThread': 0x143500440,
+            'cGUIOperation': 0x1430CAD48,
+            'cSystem': 0x143505098,
+            'cUnit': 0x143502CA8,
+            'cpComponent': 0x14323DE28,
+            'nDraw::ConstantBuffer': 0x14357BD80,
+            'nDraw::Resource': 0x14352C180,
+            'nNetwork::BlockQueue': 0x143544808,
+            'nNetwork::SessionListener': 0x1433f9678,
+            'nNetwork::nRanking::Object::StateBase': 0x143527c60,
+            'sCollision::Param': 0x142f16988,
+            'sUmbra': 0x14358ed58,
+            'rTableBase': None, # Abstract class, no vftable generated.
+            'uCoord': 0x143502E08,
+        }
     },
 }

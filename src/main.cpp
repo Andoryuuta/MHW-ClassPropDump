@@ -13,48 +13,40 @@
 #include "mt/mt.h"
 #include "sig_scan.h"
 #include "win_utils.h"
+#include "log.h"
 
 DWORD WINAPI MyFunc(LPVOID lpvParam)
 {
-    WinUtils::OpenConsole();
-    spdlog::info("Ando's MHWClassPropDump Started!");
-
-    // Get the image base.
-    uintptr_t image_base = (uintptr_t)GetModuleHandle(NULL);
-    spdlog::info("Image Base: {0:x}", image_base);
-
-    // Create our dumper object.
-    std::shared_ptr<Dumper::Dumper> dumper = std::make_unique<Dumper::Dumper>(image_base);
-
     // Suspend all threads except ours.
     // This helps to prevent crashes caused by us calling to the game's code
     // or by race conditions invalidating pointers our dumper would be using.
     WinUtils::SuspendThreads();
 
-    // Perform all game-specific intialization needed
+    WinUtils::OpenConsole();
+    Log::InitializeLogger();
+    LOG_INFO("Ando's MHWClassPropDump Started!");
+
+    // Get the image base.
+    uintptr_t image_base = (uintptr_t)GetModuleHandle(NULL);
+    LOG_INFO("Image Base: {0:x}", image_base);
+
+    // Create our dumper object & Perform all game-specific intialization needed
     // for MtDTI and MtProperty operations.
+    std::shared_ptr<Dumper::Dumper> dumper = std::make_unique<Dumper::Dumper>(image_base);
     dumper->Initialize();
 
     // Dump the native MT types table.
     dumper->DumpMtTypes("mt_types.json");
 
-    // 
+    // Dump base DTI map (no properties)
     dumper->BuildClassRecords();
-
     dumper->DumpDTIMap("dti_map_propless.json");
     //dumper->DumpResourceInformation("cresource_info.txt");
 
+    // Dump DTI map with properties.
     dumper->ProcessProperties();
     dumper->DumpDTIMap("dti_map_with_props.json");
 
-
-    // auto dumper = std::make_unique<DTIDumper::DTIDumper>();
-
-    // dumper->ParseDTI();
-    // // dumper->DumpRawInfo("dti_dump_raw.json");
-
-    // dumper->DumpToFile("dti_prop_dump.h");
-    // // dumper->DumpPythonArrayFile("dti_data.py");
 
     return 0;
 }

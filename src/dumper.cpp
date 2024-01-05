@@ -1,3 +1,4 @@
+// std
 #include <format>
 #include <fstream>
 #include <iostream>
@@ -5,14 +6,18 @@
 #include <unordered_set>
 #include <windows.h>
 
+// Third-party libs
+#include "spdlog/spdlog.h"
+#include "nlohmann/json.hpp"
+using json = nlohmann::json;
+
+// Project
+#include "log.h"
 #include "dumper.h"
 #include "mt/mt.h"
 #include "sig_scan.h"
+#include "safe_thread_calls.h"
 
-#include "spdlog/spdlog.h"
-
-#include "nlohmann/json.hpp"
-using json = nlohmann::json;
 
 namespace Dumper
 {
@@ -25,15 +30,15 @@ void to_json(json& j, const ProcessedClassRecord& c)
         class_vftable_vas.push_back(cvft);
     }
     
-    json prop_list;
-    for (auto &&pvft : c.properties)
+    json pvft_list;
+    for (auto &&pvft : c.processed_vftables)
     {
         json prop;
         for (auto &&pp : pvft.properties)
         {
             json p = json{
                 //{"name", pp.name},
-                 {"name_bytes", pp.name_bytes},
+                {"name_bytes", pp.name_bytes},
                 {"type", pp.type},
                 {"attr", pp.attr},
                 {"owner", pp.owner},
@@ -43,14 +48,19 @@ void to_json(json& j, const ProcessedClassRecord& c)
                 {"set_count", pp.set_count},
                 {"index", pp.index}
             };
+            if(pp.comment_bytes)
+            {
+                p["comment_bytes"] = *pp.comment_bytes;
+            }
             prop.push_back(p);
         }
 
         json jpvft = json{
             {"vftable_va", pvft.vftable_va},
+            {"properties_processed", pvft.properties_processed},
             {"properties", prop}
         };
-        prop_list.push_back(jpvft);   
+        pvft_list.push_back(jpvft);   
     }
     
 
@@ -67,27 +77,9 @@ void to_json(json& j, const ProcessedClassRecord& c)
         {"allocator_index", c.allocator_index},
         {"is_abstract", c.is_abstract},
         {"is_hidden", c.is_hidden},
-        {"properties_processed", c.properties_processed}, 
         {"class_vftable_vas", class_vftable_vas},
-        {"properties", prop_list}
+        {"processed_vftables", pvft_list}
     };
-    // clang-format off
-}
-
-void from_json(const json& j, ProcessedClassRecord& c)
-{
-    // clang-format off
-    j.at("dti_va").get_to(c.dti_va);
-    j.at("dti_vftable_va").get_to(c.dti_vftable_va);
-    j.at("id").get_to(c.id);
-    j.at("name").get_to(c.name);
-    j.at("parent_id").get_to(c.parent_id);
-    j.at("raw_flags_and_size").get_to(c.raw_flags_and_size);
-    j.at("size").get_to(c.size);
-    j.at("allocator_index").get_to(c.allocator_index);
-    j.at("is_abstract").get_to(c.is_abstract);
-    j.at("is_hidden").get_to(c.is_hidden);
-    j.at("properties_processed").get_to(c.properties_processed);
     // clang-format off
 }
 
@@ -110,15 +102,14 @@ void Dumper::Initialize()
 
 void Dumper::DumpMtTypes(std::string_view filename)
 {   
-    spdlog::info("Writing mt type map to: {}", filename);
+    LOG_INFO("Writing mt type map to: {}", filename);
 
     json table_array;
     const char** table = GetMtTypeTable(this->m_image_base);
-    for (size_t i = 0; i < GetMtTypeTableCount(this->m_image_base); i++)
+    for (uint32_t i = 0; i < GetMtTypeTableCount(this->m_image_base); i++)
 	{
         const char* type_name = table[i];
         size_t size = GetMtTypeSize(this->m_image_base, i);
-		//spdlog::info("MtType idx:{}, name:{}", i, type_name);
         json entry = json{
             {"id", i},
             {"name", type_name},
@@ -140,10 +131,10 @@ uintptr_t parse_lea_x64_constant(uintptr_t lea_address)
     return displ + lea_address + x64_lea_rax_opcode_size;
 }
 
-// TODO(Andorytuuta): Make 32-bit variant of this function.
+// TODO(Andoryuuta): Make 32-bit variant of this function.
 void Dumper::BuildClassRecords()
 {
-    spdlog::info("Total DTI objects in client: {}", m_sorted_dti_vec.size());
+    LOG_INFO("Total DTI objects in client: {}", m_sorted_dti_vec.size());
 
     // Build set to filter to valid vftables.
     // We check if each possible vftable match is valid by verifying that it's referenced at least once
@@ -169,7 +160,7 @@ void Dumper::BuildClassRecords()
     {
         lea_used_constants.insert(parse_lea_x64_constant(lea_xrefs_1[i]));
     }
-    spdlog::info("LEA filter size: 0x{0:x}", lea_used_constants.size());
+    LOG_INFO("LEA filter size: 0x{0:x}", lea_used_constants.size());
 
 
     // Find all of the (potential) `GetDTI` vftable methods:
@@ -178,7 +169,7 @@ void Dumper::BuildClassRecords()
     *    retn
     */
     std::vector<uintptr_t> potential_getdti_matches = SigScan::ScanCurrentExecutable("48 8D 05 ?? ?? ?? ?? C3", /*alignment=*/8);
-    spdlog::info("Potential ::GetDTI AOB matches: 0x{0:x}", potential_getdti_matches.size());
+    LOG_INFO("Potential ::GetDTI AOB matches: 0x{0:x}", potential_getdti_matches.size());
 
     // Build a set in order to have a fast check if an address is a DTI object instance.
     std::unordered_set<Mt::MtDTI*> dti_set;
@@ -201,7 +192,7 @@ void Dumper::BuildClassRecords()
     {
         if (i % 100 == 0) 
         {
-            spdlog::info("Processing ::GetDTI matches [{}/{}]", i, potential_getdti_matches.size());
+            LOG_INFO("Processing ::GetDTI matches [{}/{}]", i, potential_getdti_matches.size());
         }
         uintptr_t match_address = potential_getdti_matches[i];
         uintptr_t constant_address = parse_lea_x64_constant(match_address);
@@ -234,7 +225,7 @@ void Dumper::BuildClassRecords()
                     // We should _never_ have a single vftable match that doesn't pass the LEA filter
                     if (!is_vftable_referenced)
                     {
-                        spdlog::error("Single vftable failed to pass LEA filter: 0x{0:x}", vftable_base_address);
+                        LOG_ERROR("Single vftable failed to pass LEA filter: 0x{0:x}", vftable_base_address);
                         assert(is_vftable_referenced == true);
                     }
 
@@ -279,7 +270,7 @@ void Dumper::BuildClassRecords()
 // Dump the core DTI map (no properties). 
 void Dumper::DumpDTIMap(std::string_view filename)
 {
-    spdlog::info("Writing base DTI map to: {}", filename);
+    LOG_INFO("Writing base DTI map to: {}", filename);
 
     json j = m_class_records;
 
@@ -296,7 +287,7 @@ void Dumper::DumpDTIMap(std::string_view filename)
 // has been built.
 void Dumper::DumpResourceInformation(std::string_view filename)
 {
-    spdlog::info("Writing cResource info to: {}", filename);
+    LOG_INFO("Writing cResource info to: {}", filename);
 
     std::ofstream file;
     file.open(filename, std::ios::out | std::ios::trunc);
@@ -322,7 +313,7 @@ void Dumper::DumpResourceInformation(std::string_view filename)
     }
 
     file.flush();
-    spdlog::info("Done writing cResource info");
+    LOG_INFO("Done writing cResource info");
 }
 
 // Get a flat vector of DTI pointers, sorted alphabetically by name.
@@ -375,153 +366,35 @@ struct MSVCVirtualClassInstance
     uintptr_t vftable;
 };
 
-bool try_dti_create_property(Mt::MtObject* object, Mt::MtPropertyList* property_list)
-{
-    __try
-    {
-        object->CreateProperty(property_list);
-        return true;
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    {
-        return false;
-    }
-}
-
-struct try_dti_create_property_threaded_entry_struct {
-    Mt::MtObject* object;
-    Mt::MtPropertyList* property_list;
-    bool result;
-    bool finished_ok;
-};
-
-DWORD WINAPI try_dti_create_property_threaded_entry(LPVOID lpvParam)
-{
-    auto data = (try_dti_create_property_threaded_entry_struct*)lpvParam;
-    data->result = try_dti_create_property(data->object, data->property_list);
-    data->finished_ok = true;
-    return 0;
-}
-
-bool try_dti_create_property_threaded(Mt::MtObject* object, Mt::MtPropertyList* property_list)
-{
-    // Create a large buffer on the heap to use for our thread-passing data.
-    // This is required as the function we call may corrupt data around this pointer
-    // if we don't have a proper vftable.
-    std::vector<uint8_t> buf(1024*128, 0);
-    auto data = reinterpret_cast<try_dti_create_property_threaded_entry_struct*>(buf.data());
-    data->object = object;
-    data->property_list = property_list;
-    data->finished_ok = false;
-
-    auto handle = CreateThread(NULL, 0, try_dti_create_property_threaded_entry, (LPVOID)data, 0, NULL);
-    auto wait_result = WaitForSingleObject(handle, 1000);
-    if (wait_result == WAIT_TIMEOUT)
-    {
-        TerminateThread(handle, 1);
-        spdlog::info("try_dti_create_property thread timed out/failed - terminating thread.");
-        return false;
-    }
-
-    if (!data->finished_ok)
-    {
-        spdlog::info("try_dti_create_property failed.");
-        return false;
-    }
-
-    return data->result;
-}
-
-Mt::MtObject* try_dti_create_new_instance(Mt::MtDTI* dti)
-{
-    __try
-    {
-        Mt::MtObject* obj = reinterpret_cast<Mt::MtObject*>(dti->NewInstance());
-        return obj;
-    }
-    __except (EXCEPTION_EXECUTE_HANDLER)
-    {
-        return nullptr;
-    }
-}
-
-struct try_dti_create_new_instance_threaded_entry_struct {
-    Mt::MtDTI* dti;
-    Mt::MtObject* result;
-    bool finished_ok;
-};
-
-DWORD WINAPI try_dti_create_new_instance_threaded_entry(LPVOID lpvParam)
-{
-    auto data = (try_dti_create_new_instance_threaded_entry_struct*)lpvParam;
-    data->result = try_dti_create_new_instance(data->dti);
-    data->finished_ok = true;
-    return 0;
-}
-
-Mt::MtObject* try_dti_create_new_instance_threaded(Mt::MtDTI* dti)
-{
-    // Create a large buffer on the heap to use for our thread-passing data.
-    // This is required as the function we call may corrupt data around this pointer
-    // if we don't have a proper vftable.
-    std::vector<uint8_t> buf(1024*128, 0);
-    auto data = reinterpret_cast<try_dti_create_new_instance_threaded_entry_struct*>(buf.data());
-    data->dti = dti;
-    data->result = nullptr;
-    data->finished_ok = false;
-
-    auto handle = CreateThread(NULL, 0, try_dti_create_new_instance_threaded_entry, (LPVOID)data, 0, NULL);
-    auto wait_result = WaitForSingleObject(handle, 1000);
-    if (wait_result == WAIT_TIMEOUT)
-    {
-        TerminateThread(handle, 1);
-        spdlog::info("try_dti_create_new_instance thread timed out/failed - terminating thread.");
-        return nullptr;
-    }
-
-    if (!data->finished_ok)
-    {
-        spdlog::info("try_dti_create_new_instance failed.");
-        return nullptr;
-    }
-
-    return data->result;
-}
-
-
 // Process all of the DTI properties of the current class records.
 void Dumper::ProcessProperties()
 {
-    std::ofstream file;
-    file.open("property_process.log", std::ios::out | std::ios::trunc);
-
     for (size_t i = 0; i < m_class_records.size(); i++)
     {
         ProcessedClassRecord class_record = m_class_records[i];
         Mt::MtDTI* dti = reinterpret_cast<Mt::MtDTI*>(class_record.dti);
         if (class_record.class_vftables.size() == 0)
         {
-            spdlog::info("Processing properties for {}, vftable count: {}", dti->name(), class_record.class_vftables.size());
-            file << std::format("Processing properties for {}, vftable count: {}\n", dti->name(), class_record.class_vftables.size());
+            LOG_INFO("Processing properties for {}, vftable count: {}", dti->name(), class_record.class_vftables.size());
         }
 
+        bool properties_processed = false;
         for (size_t vftable_idx = 0; vftable_idx < class_record.class_vftables.size(); vftable_idx++)
         {
-            spdlog::info("Processing properties for {}, vftable idx: {}", dti->name(), vftable_idx);
-            file << std::format("Processing properties for {}, vftable idx: {}\n", dti->name(), vftable_idx);
+            LOG_INFO("Processing properties for {}, vftable idx: {}", dti->name(), vftable_idx);
 
             // Create a fake object initalized to zero to hold our fake object.
             // Because of inheiritance outside the DTI system, we don't know that the
             // size is 100% accurate, nor that the `createProperty` method wont try
             // to access memory outside these bytes, so we add some extra room "just-in-case"
             // (predictable crashes with nullptr are better than it mysteriously "working" sometimes)
-            std::vector<uint8_t> fake_object_memory(dti->size(), 0);
+            const uint32_t safety_pad_size = 0x1000;
+            std::vector<uint8_t> fake_object_memory(dti->size()+safety_pad_size, 0);
             {
                 auto fake_object = reinterpret_cast<MSVCVirtualClassInstance*>(fake_object_memory.data());
                 fake_object->vftable = class_record.class_vftables[vftable_idx];
             }
             auto fake_object = reinterpret_cast<Mt::MtObject*>(fake_object_memory.data());
-            file << std::format("Created fake object: 0x{:X}\n", reinterpret_cast<uintptr_t>(fake_object));
         
             // Create a MtPropertyList
             auto mt_property_list_dti = this->GetDTIByName("MtPropertyList");
@@ -531,28 +404,26 @@ void Dumper::ProcessProperties()
             }
 
             Mt::MtPropertyList* property_list = reinterpret_cast<Mt::MtPropertyList*>(mt_property_list_dti->NewInstance());
-            file << std::format("Created MtPropertyList: 0x{:X}\n", reinterpret_cast<uintptr_t>(property_list));
-            file.flush();
 
             // Populate the properties into into.
-            try_dti_create_property_threaded(fake_object, property_list);
+            properties_processed = try_dti_create_property_threaded(fake_object, property_list);
 
             //bool ok = try_dti_create_property_threaded(fake_object, property_list);
             //if (!ok)
             //{
-            //    spdlog::info("Hard exception while processing fake object!");
+            //    LOG_INFO("Hard exception while processing fake object!");
             //    continue;
             //}
 
             //bool ok = try_dti_create_property_threaded(fake_object, property_list);
             //if (!ok)
             //{
-            //    spdlog::info("Hard exception while processing fake object, making real object!");
+            //    LOG_INFO("Hard exception while processing fake object, making real object!");
             //    file << std::format("Hard exception while processing fake object, making real object!\n");
 
             //    if(dti->is_abstract())
             //    {
-            //        spdlog::critical("DTI is abstract - can't attempt to create a real object. Skipping.");
+            //        LOG_CRITICAL("DTI is abstract - can't attempt to create a real object. Skipping.");
             //        file << std::format("DTI is abstract - can't attempt to create a real object. Skipping.\n");
             //        continue;
             //    }
@@ -562,7 +433,7 @@ void Dumper::ProcessProperties()
             //    Mt::MtObject* real_object = try_dti_create_new_instance_threaded_entry_struct(dti);
             //    if(real_object == nullptr)
             //    { 
-            //        spdlog::critical("Failed to create new instance of real object!");
+            //        LOG_CRITICAL("Failed to create new instance of real object!");
             //        file << std::format("Failed to create new instance of real object!\n");
             //        continue;
             //    }
@@ -576,13 +447,13 @@ void Dumper::ProcessProperties()
             //    bool ok = try_dti_create_property_threaded(real_object, property_list);
             //    //if (!ok)
             //    //{
-            //    //    spdlog::critical("Hard exception while processing real object!");
+            //    //    LOG_CRITICAL("Hard exception while processing real object!");
             //    //    file << std::format("Hard exception while processing real object!\n");
             //    //    continue;
             //    //}
             //}
 
-            //spdlog::info("Got valid property list(0x{:X}), saving to record.", (uintptr_t)property_list);
+            //LOG_INFO("Got valid property list(0x{:X}), saving to record.", (uintptr_t)property_list);
 
             // Create our property list
             std::vector<ProcessedProperty> props;
@@ -591,7 +462,7 @@ void Dumper::ProcessProperties()
 
                 for(auto mt_prop = property_list->mpElement; mt_prop != nullptr && mt_prop->name() != nullptr; mt_prop = mt_prop->next())
                 {
-                    //spdlog::info("Property: {}", mt_prop->name());
+                    //LOG_INFO("Property: {}", mt_prop->name());
 
                     // We have to treat the name as bytes because the json encoder
                     // only accepts utf8 characters, which doesn't always match the
@@ -600,9 +471,14 @@ void Dumper::ProcessProperties()
                     std::vector<uint8_t> name_bytes(ssize, 0);
                     memcpy_s(name_bytes.data(), name_bytes.size(), mt_prop->name(), ssize);
 
+                    ssize = strnlen_s(mt_prop->comment(), 4096);
+                    std::vector<uint8_t> comment_bytes(ssize, 0);
+                    memcpy_s(comment_bytes.data(), comment_bytes.size(), mt_prop->comment(), ssize);
+
                     ProcessedProperty pp = {
-                         .name_bytes = name_bytes,
+                        .name_bytes = name_bytes,
                         //.name = std::string(mt_prop->name()),
+                        .comment_bytes = comment_bytes,
                         .type = mt_prop->type(),
                         .attr = mt_prop->attr(),
                         .owner = mt_prop->owner(),
@@ -618,14 +494,14 @@ void Dumper::ProcessProperties()
 
             ProcessedVftable pv = {
                 .vftable_va = class_record.class_vftables[vftable_idx],
+                .properties_processed = properties_processed,
                 .properties = props,
             };
-            m_class_records[i].properties.push_back(pv);
+            m_class_records[i].processed_vftables.push_back(pv);
         }
-        m_class_records[i].properties_processed = true;
     }
     
-    spdlog::info("Done processing properties!");
+    LOG_INFO("Done processing properties!");
 }
 
 } // namespace Dumper

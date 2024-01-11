@@ -1,0 +1,5 @@
+#cmakedefine MT_GAME_MHW
+#cmakedefine MT_GAME_MHS2
+#cmakedefine MT_GAME_UMVC3
+#cmakedefine MT_GAME_DDDA
+#cmakedefine MT_GAME_DDON

@@ -1,50 +1,62 @@
 #include <Windows.h>
-#include <tlhelp32.h>
 #include <cstdint>
 #include <iostream>
 #include <map>
-#include <set>
 #include <memory>
+#include <set>
+#include <tlhelp32.h>
+
 #include "spdlog/spdlog.h"
-#include "SigScan.hpp"
-#include "Mt.hpp"
-#include "DTIDumper.hpp"
 
-// Open new console for c(in/out/err)
-void OpenConsole()
-{
-	AllocConsole();
-	FILE* cinStream;
-	FILE* coutStream;
-	FILE* cerrStream;
-	freopen_s(&cinStream, "CONIN$", "r", stdin);
-	freopen_s(&coutStream, "CONOUT$", "w", stdout);
-	freopen_s(&cerrStream, "CONOUT$", "w", stderr);
+// #include "DTIDumper.hpp"
+#include "dumper.h"
+#include "mt/mt.h"
+#include "sig_scan.h"
+#include "win_utils.h"
+#include "log.h"
 
-
-	// From: https://stackoverflow.com/a/45622802 to deal with UTF8 CP:
-	SetConsoleOutputCP(CP_UTF8);
-	setvbuf(stdout, nullptr, _IOFBF, 1000);
-}
 DWORD WINAPI MyFunc(LPVOID lpvParam)
 {
-	OpenConsole();
-	spdlog::info("Ando's MHWClassPropDump Started!");
+    // Suspend all threads except ours.
+    // This helps to prevent crashes caused by us calling to the game's code
+    // or by race conditions invalidating pointers our dumper would be using.
+    WinUtils::SuspendThreads();
 
-	auto dumper = std::make_unique<DTIDumper::DTIDumper>();
+    WinUtils::OpenConsole();
+    Log::InitializeLogger();
+    LOG_INFO("Ando's MHWClassPropDump Started!");
 
-	dumper->ParseDTI();
-	dumper->DumpToFile("dti_prop_dump.h");
-	dumper->DumpPythonArrayFile("dti_data.py");
-	dumper->DumpResourceInformation("cresource_info.txt");
+    // Get the image base.
+    uintptr_t image_base = (uintptr_t)GetModuleHandle(NULL);
+    LOG_INFO("Image Base: {0:x}", image_base);
 
-	return 0;
+    // Create our dumper object & Perform all game-specific intialization needed
+    // for MtDTI and MtProperty operations.
+    std::shared_ptr<Dumper::Dumper> dumper = std::make_unique<Dumper::Dumper>(image_base);
+    dumper->Initialize();
+
+    // Dump the native MT types table.
+    dumper->DumpMtTypes("mt_types.json");
+
+    // Dump base DTI map (no properties)
+    dumper->BuildClassRecords();
+    dumper->DumpDTIMap("dti_map_propless.json");
+    //dumper->DumpResourceInformation("cresource_info.txt");
+
+    // Dump DTI map with properties.
+    dumper->ProcessProperties();
+    dumper->DumpDTIMap("dti_map_with_props.json");
+
+
+    return 0;
 }
 
-BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
-	if (fdwReason == DLL_PROCESS_ATTACH) {
-		CreateThread(NULL, 0, MyFunc, 0, 0, NULL);
-	}
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
+{
+    if (fdwReason == DLL_PROCESS_ATTACH)
+    {
+        CreateThread(NULL, 0, MyFunc, 0, 0, NULL);
+    }
 
-	return TRUE;
+    return TRUE;
 }

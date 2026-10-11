@@ -36,6 +36,10 @@ def main():
     print("Wrote flat dump", clean_dump_path)
     print("Wrote ./flat_dump.h")
 
+    # Legacy format, which includes the parent properties.
+    dp.write_legacy_dump('./flat_dump_legacy_format.h')
+    print("Wrote ./flat_dump_legacy_format.h")
+
 
 if __name__ == '__main__':
     main()

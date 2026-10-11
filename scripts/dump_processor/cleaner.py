@@ -203,6 +203,10 @@ class DumpCleaner():
                     p0['set'] == p1['set'] or p0_offset_set == p1_offset_set)
 
         for cr in data:
+            # Keep the full (inherited + own) property list before removing the parent properties,
+            # for outputting in the legacy DTI dump format.
+            cr['all_properties'] = cr['properties']
+
             parent_id = cr['parent_id']
             if parent_id == 0:
                 continue

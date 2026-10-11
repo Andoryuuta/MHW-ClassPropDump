@@ -5,6 +5,8 @@
 // 00000001414491AC | 48:83EC 28               | sub rsp,28 | IAT start:
 // 000000014153B000
 
+#define MT_DUMP_CRESOURCE_INFO false
+
 namespace Mt
 {
 class MtProperty;

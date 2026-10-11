@@ -12,6 +12,7 @@
 #define MT_DTI_HASH_TABLE_OFFSET 0xd6d7b0
 #define MT_TYPE_TABLE_RVA_OFFSET 0xd2aeb0
 #define MT_TYPE_TABLE_COUNT 75
+#define MT_DUMP_CRESOURCE_INFO false
 
 // Game-specific MT class definitions
 namespace Mt

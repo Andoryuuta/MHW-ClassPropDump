@@ -13,6 +13,7 @@
 #define MT_TYPE_TABLE_RVA_OFFSET 0xb7a650
 #define MT_TYPE_GET_BYTES_RVA_OFFSET 0x31d290
 #define MT_TYPE_TABLE_COUNT 75
+#define MT_DUMP_CRESOURCE_INFO true
 
 // Game-specific MT class definitions
 namespace Mt

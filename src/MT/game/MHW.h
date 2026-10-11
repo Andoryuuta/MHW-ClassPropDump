@@ -19,6 +19,7 @@
 #define MT_TYPE_TABLE_RVA_OFFSET 0x3fdcd90
 #define MT_TYPE_GET_BYTES_RVA_OFFSET 0x218be10
 #define MT_TYPE_TABLE_COUNT 77
+#define MT_DUMP_CRESOURCE_INFO true
 
 
 // Game-specific MT class definitions

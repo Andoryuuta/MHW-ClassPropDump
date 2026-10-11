@@ -41,7 +41,9 @@ DWORD WINAPI MyFunc(LPVOID lpvParam)
     // Dump base DTI map (no properties)
     dumper->BuildClassRecords();
     dumper->DumpDTIMap("dti_map_propless.json");
-    //dumper->DumpResourceInformation("cresource_info.txt");
+#if MT_DUMP_CRESOURCE_INFO
+    dumper->DumpResourceInformation("cresource_info.csv");
+#endif
 
     // Dump DTI map with properties.
     dumper->ProcessProperties();

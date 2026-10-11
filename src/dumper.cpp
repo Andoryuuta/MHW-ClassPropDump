@@ -291,12 +291,11 @@ void Dumper::DumpResourceInformation(std::string_view filename)
 
     std::ofstream file;
     file.open(filename, std::ios::out | std::ios::trunc);
+    file << "class_name,id,ext\n";
 
     for (auto &&record: this->m_class_records)
     {
         Mt::MtDTI* dti = reinterpret_cast<Mt::MtDTI*>(record.dti_va);
-        file << fmt::format("Class:{}\n", dti->name());
-        file.flush();
 
         if(dti->IsDependantOf("cResource"))
         {
@@ -307,7 +306,7 @@ void Dumper::DumpResourceInformation(std::string_view filename)
                 // a real object since it just returns a static const char*. 
                 uintptr_t tmp = record.class_vftables[0];
                 Mt::cResource* rdti = reinterpret_cast<Mt::cResource*>(&tmp);
-                file << fmt::format("Class:{}, ID:{:X}, Extension:{}\n", dti->name(), dti->id(), rdti->getExt());
+                file << fmt::format("{},{:X},{}\n", dti->name(), dti->id(), rdti->getExt());
             }
         }
     }

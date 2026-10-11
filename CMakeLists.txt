@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.8)
+cmake_minimum_required (VERSION 3.10)
 
 project(MTDTIDump VERSION "0.0.1")
 
@@ -6,11 +6,12 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-SET(MT_GAME_MHW ON BOOL "Compile for MHW")
-SET(MT_GAME_MHS2 OFF BOOL "Compile for MHS2")
-SET(MT_GAME_UMVC3 OFF BOOL "Compile for UMVC3")
-SET(MT_GAME_DDDA OFF BOOL "Compile for DDDA")
-SET(MT_GAME_DDON OFF BOOL "Compile for DDON")
+set(MT_GAMES MHW MHS2 UMVC3 DDDA DDON)
+set(MT_GAME "MHW" CACHE STRING "Game to compile for (one of: ${MT_GAMES})")
+set_property(CACHE MT_GAME PROPERTY STRINGS ${MT_GAMES})
+if(NOT MT_GAME IN_LIST MT_GAMES)
+	message(FATAL_ERROR "Invalid MT_GAME '${MT_GAME}'")
+endif()
 
 configure_file(src/config.h.in config.h)
 

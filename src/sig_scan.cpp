@@ -125,16 +125,20 @@ std::vector<uintptr_t> SigScan::ScanAllRaw(uintptr_t start_address, uintptr_t en
 
     // Go over each region and scan.
     while (VirtualQuery(current_region_base, &mbi, sizeof(MEMORY_BASIC_INFORMATION)) &&
-           (uintptr_t)current_region_base <= end_address)
+           (uintptr_t)current_region_base < end_address)
     {
         uint8_t* region_end = (uint8_t*)((uintptr_t)mbi.BaseAddress + (uintptr_t)mbi.RegionSize);
+
+        // provided start/end scan addresses may be within a page and not to it's extents,
+        // so clamp our scan range properly. 
+        uint8_t* scan_start = (uint8_t*)std::max<uintptr_t>((uintptr_t)mbi.BaseAddress, start_address);
+        uint8_t* scan_end = (uint8_t*)std::min<uintptr_t>((uintptr_t)region_end, end_address);
 
         // spdlog::info("Scanning region - start:{:X}, end:{:X}", (uintptr_t)mbi.BaseAddress,
         //              (uintptr_t)mbi.BaseAddress + (uintptr_t)mbi.RegionSize);
         if ((mbi.Protect & scan_protection) != 0)
         {
-
-            for (uint8_t* p = (uint8_t*)mbi.BaseAddress; p < region_end - sig_bytes.size(); p += alignment)
+            for (uint8_t* p = scan_start; p < scan_end - sig_bytes.size(); p += alignment)
             {
                 for (size_t i = 0; i < sig_bytes.size(); i++)
                 {

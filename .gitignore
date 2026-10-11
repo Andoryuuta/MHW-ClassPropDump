@@ -1,2 +1,8 @@
 out/*
+build/*
 .vs/*
+.vscode/*
+flat_dump.h
+flat_dump_mhw.h
+flat_dump_legacy_format.h
+__pycache__/

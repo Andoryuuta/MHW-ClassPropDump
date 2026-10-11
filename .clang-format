@@ -1,0 +1,6 @@
+BasedOnStyle: Microsoft
+IndentWidth: 4
+IndentPPDirectives: BeforeHash
+AllowShortBlocksOnASingleLine: Always
+AllowShortFunctionsOnASingleLine: All
+PointerAlignment: Left

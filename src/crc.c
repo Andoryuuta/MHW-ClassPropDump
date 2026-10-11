@@ -17,8 +17,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-
-
 /**
  * Static table used for the table_driven implementation.
  */

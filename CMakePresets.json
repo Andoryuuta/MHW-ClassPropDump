@@ -1,0 +1,27 @@
+{
+    "version": 8,
+    "configurePresets": [
+        {
+            "name": "Clang 19.1.5 (MSVC CLI) - amd64 for MSVC 17.14.36603.0 (Visual Studio Community 2022 Release)",
+            "displayName": "Clang 19.1.5 (MSVC CLI) - amd64 for MSVC 17.14.36603.0 (Visual Studio Community 2022 Release)",
+            "description": "Using compilers: C = C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\Llvm\\x64\\bin\\clang-cl.exe, CXX = C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\Llvm\\x64\\bin\\clang-cl.exe",
+            "generator": "Visual Studio 17 2022",
+            "toolset": "ClangCL,host=x64",
+            "architecture": "x64",
+            "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
+                "CMAKE_C_COMPILER": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/Llvm/x64/bin/clang-cl.exe",
+                "CMAKE_CXX_COMPILER": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/Llvm/x64/bin/clang-cl.exe"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "Clang 19.1.5 (MSVC CLI) - amd64 for MSVC 17.14.36603.0 (Visual Studio Community 2022 Release)-debug",
+            "displayName": "Clang 19.1.5 (MSVC CLI) - amd64 for MSVC 17.14.36603.0 (Visual Studio Community 2022 Release) - Debug",
+            "configurePreset": "Clang 19.1.5 (MSVC CLI) - amd64 for MSVC 17.14.36603.0 (Visual Studio Community 2022 Release)",
+            "configuration": "Debug"
+        }
+    ]
+}

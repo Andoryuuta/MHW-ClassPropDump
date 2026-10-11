@@ -98,7 +98,7 @@ std::vector<uintptr_t> SigScan::Scan(uintptr_t start_address, uintptr_t end_addr
         }
     }
 
-    return ScanAllRaw(start_address, end_address, sig_bytes, sig_skip_mask, scan_protection);
+    return ScanAllRaw(start_address, end_address, sig_bytes, sig_skip_mask, scan_protection, alignment);
 }
 
 std::vector<uintptr_t> SigScan::ScanAllRaw(uintptr_t start_address, uintptr_t end_address,

@@ -24,7 +24,7 @@ DWORD WINAPI MyFunc(LPVOID lpvParam)
 
     WinUtils::OpenConsole();
     Log::InitializeLogger();
-    LOG_INFO("Ando's MTF DTI Dumper Started!");
+    LOG_INFO("Ando's MTF DTI Dumper Started! (built for game:"  MT_GAME_STRING  ")");
 
     // Get the image base.
     uintptr_t image_base = (uintptr_t)GetModuleHandle(NULL);
@@ -47,6 +47,7 @@ DWORD WINAPI MyFunc(LPVOID lpvParam)
     dumper->ProcessProperties();
     dumper->DumpDTIMap("dti_map_with_props.json");
 
+    LOG_INFO("Complete! You can now close this / the game.");
 
     return 0;
 }

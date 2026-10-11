@@ -1,1 +1,2 @@
 #define MT_GAME_@MT_GAME@
+#define MT_GAME_STRING "@MT_GAME@"

@@ -131,7 +131,7 @@ std::vector<uintptr_t> SigScan::ScanAllRaw(uintptr_t start_address, uintptr_t en
 
         // spdlog::info("Scanning region - start:{:X}, end:{:X}", (uintptr_t)mbi.BaseAddress,
         //              (uintptr_t)mbi.BaseAddress + (uintptr_t)mbi.RegionSize);
-        if ((mbi.AllocationProtect & scan_protection) != 0 || (mbi.Protect & scan_protection) != 0)
+        if ((mbi.Protect & scan_protection) != 0)
         {
 
             for (uint8_t* p = (uint8_t*)mbi.BaseAddress; p < region_end - sig_bytes.size(); p += alignment)

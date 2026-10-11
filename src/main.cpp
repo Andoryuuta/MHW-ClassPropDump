@@ -24,7 +24,7 @@ DWORD WINAPI MyFunc(LPVOID lpvParam)
 
     WinUtils::OpenConsole();
     Log::InitializeLogger();
-    LOG_INFO("Ando's MHWClassPropDump Started!");
+    LOG_INFO("Ando's MTF DTI Dumper Started!");
 
     // Get the image base.
     uintptr_t image_base = (uintptr_t)GetModuleHandle(NULL);

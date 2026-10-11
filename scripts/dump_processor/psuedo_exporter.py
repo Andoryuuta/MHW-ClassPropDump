@@ -230,7 +230,7 @@ class DumpProcessor():
         date_time = datetime.datetime.now().strftime('%d-%m-%Y %H-%M-%S')
 
         with open(filepath, 'wt', encoding='utf8') as f:
-            f.write(f"// Ando's MHW ClassPropDump log [{date_time}]\n")
+            f.write(f"// Ando's MTF DTI Dumper log [{date_time}]\n")
             f.write(f"// Image Base: {image_base:#X}\n\n")
             for i, cr in enumerate(self._dump):
                 if i % 100 == 0:

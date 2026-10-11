@@ -44,4 +44,6 @@ class cResource : MtObject
     #include "mt/game/DDDA.h"
 #elif defined(MT_GAME_DDON)
     #include "mt/game/DDON.h"
+#elif defined(MT_GAME_MM11)
+    #include "mt/game/MM11.h"
 #endif

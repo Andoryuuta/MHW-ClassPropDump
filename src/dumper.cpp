@@ -324,7 +324,10 @@ std::vector<Mt::MtDTI*> Dumper::GetSortedDTIVector()
     for (int i = 0; i < 256; i++)
     {
         Mt::MtDTI* dti = m_dti_hash_table->buckets[i];
-        while (true)
+
+        // Some games like MM11 don't have enough classes to fully fill up the
+        // hash buckets with at least one entry, so there _can_ be nullptrs.
+        while (dti != nullptr)
         {
             entries.push_back(dti);
 
